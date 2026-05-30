@@ -3,12 +3,47 @@
 import { Header } from '@/components/Header'
 import { ReportForm } from '@/components/ReportForm'
 import { CommentSection } from '@/components/CommentSection'
-import { ChurchReport } from '@/lib/data'
+import { useCreateReport } from '@/hooks/use-data'
+import { toast } from 'sonner'
 
 export default function LokalPage() {
-  const handleSubmit = (report: ChurchReport) => {
-    console.log('New report submitted:', report)
-    // In a real app, this would save to a database
+  const { createReport, loading } = useCreateReport()
+
+  const handleSubmit = async (reportData: {
+    churchName: string
+    region: string
+    month: string
+    year: number
+    osanTama: { id: string; deskrisaun: string; montante: number }[]
+    gastu: { id: string; gastuBaSaida: string; montante: number }[]
+  }) => {
+    // Transform data for API (remove IDs from new entries)
+    const apiData = {
+      churchName: reportData.churchName,
+      region: reportData.region,
+      month: reportData.month,
+      year: reportData.year,
+      osanTama: reportData.osanTama.map((ot) => ({
+        deskrisaun: ot.deskrisaun,
+        montante: ot.montante,
+      })),
+      gastu: reportData.gastu.map((g) => ({
+        gastuBaSaida: g.gastuBaSaida,
+        montante: g.montante,
+      })),
+    }
+
+    const result = await createReport(apiData)
+    
+    if (result) {
+      toast.success('Relatóriu konklui!', {
+        description: `Dadus ba ${reportData.churchName} tau ona`,
+      })
+    } else {
+      toast.error('Erro', {
+        description: 'La bele tau relatóriu. Tenta fali.',
+      })
+    }
   }
 
   return (

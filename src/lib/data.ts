@@ -1,33 +1,32 @@
 // TypeScript Interface for Church Report
+import { prisma } from './db'
+
+// ============================================
+// TYPES
+// ============================================
+
 export interface ChurchReport {
   id: string
   churchName: string
   region: string
   month: string
   year: number
-
-  // Dynamic revenue entries
   osanTama: OsanTamaEntry[]
-
-  // Dynamic expense entries
   gastu: GastuEntry[]
 }
 
-// Dynamic revenue entry
 export interface OsanTamaEntry {
   id: string
   deskrisaun: string
   montante: number
 }
 
-// Dynamic expense entry
 export interface GastuEntry {
   id: string
   gastuBaSaida: string
   montante: number
 }
 
-// Comment interface
 export interface Comment {
   id: string
   page: 'landing' | 'regional' | 'nasional'
@@ -36,7 +35,11 @@ export interface Comment {
   timestamp: Date
 }
 
-// Regions - Updated to only 4 regions
+// ============================================
+// CONSTANTS
+// ============================================
+
+// Regions - Only 4 regions
 export const REGIONS = [
   'Baucau',
   'Lospalos',
@@ -64,12 +67,14 @@ export const MONTHS = [
 
 export type Month = (typeof MONTHS)[number]
 
-// Generate unique ID
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
 export const generateId = (): string => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
-// Calculate total revenue
 export const calculateTotalRevenue = (report: Partial<ChurchReport>): number => {
   if (report.osanTama && report.osanTama.length > 0) {
     return report.osanTama.reduce((sum, entry) => sum + (entry.montante || 0), 0)
@@ -77,7 +82,6 @@ export const calculateTotalRevenue = (report: Partial<ChurchReport>): number => 
   return 0
 }
 
-// Calculate total expenses
 export const calculateTotalExpense = (report: Partial<ChurchReport>): number => {
   if (report.gastu && report.gastu.length > 0) {
     return report.gastu.reduce((sum, entry) => sum + (entry.montante || 0), 0)
@@ -85,12 +89,10 @@ export const calculateTotalExpense = (report: Partial<ChurchReport>): number => 
   return 0
 }
 
-// Calculate balance
 export const calculateBalance = (report: Partial<ChurchReport>): number => {
   return calculateTotalRevenue(report) - calculateTotalExpense(report)
 }
 
-// Format number as USD
 export const formatUSD = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -100,7 +102,214 @@ export const formatUSD = (amount: number): string => {
   }).format(amount)
 }
 
-// Dummy data for 10 churches with dynamic entries
+export const formatDateTime = (date: Date): string => {
+  return new Intl.DateTimeFormat('pt-TL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+// ============================================
+// DATABASE OPERATIONS
+// ============================================
+
+// Get all reports with their entries
+export async function getAllReports(): Promise<ChurchReport[]> {
+  try {
+    const reports = await prisma.churchReport.findMany({
+      include: {
+        osanTama: true,
+        gastu: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return reports.map((report) => ({
+      id: report.id,
+      churchName: report.churchName,
+      region: report.region,
+      month: report.month,
+      year: report.year,
+      osanTama: report.osanTama.map((ot) => ({
+        id: ot.id,
+        deskrisaun: ot.deskrisaun,
+        montante: ot.montante,
+      })),
+      gastu: report.gastu.map((g) => ({
+        id: g.id,
+        gastuBaSaida: g.gastuBaSaida,
+        montante: g.montante,
+      })),
+    }))
+  } catch (error) {
+    console.error('Error fetching reports:', error)
+    return []
+  }
+}
+
+// Create a new report with entries
+export async function createReport(data: {
+  churchName: string
+  region: string
+  month: string
+  year: number
+  osanTama: { deskrisaun: string; montante: number }[]
+  gastu: { gastuBaSaida: string; montante: number }[]
+}): Promise<ChurchReport | null> {
+  try {
+    const report = await prisma.churchReport.create({
+      data: {
+        churchName: data.churchName,
+        region: data.region,
+        month: data.month,
+        year: data.year,
+        osanTama: {
+          create: data.osanTama,
+        },
+        gastu: {
+          create: data.gastu,
+        },
+      },
+      include: {
+        osanTama: true,
+        gastu: true,
+      },
+    })
+
+    return {
+      id: report.id,
+      churchName: report.churchName,
+      region: report.region,
+      month: report.month,
+      year: report.year,
+      osanTama: report.osanTama.map((ot) => ({
+        id: ot.id,
+        deskrisaun: ot.deskrisaun,
+        montante: ot.montante,
+      })),
+      gastu: report.gastu.map((g) => ({
+        id: g.id,
+        gastuBaSaida: g.gastuBaSaida,
+        montante: g.montante,
+      })),
+    }
+  } catch (error) {
+    console.error('Error creating report:', error)
+    return null
+  }
+}
+
+// Delete a report
+export async function deleteReport(id: string): Promise<boolean> {
+  try {
+    await prisma.churchReport.delete({
+      where: { id },
+    })
+    return true
+  } catch (error) {
+    console.error('Error deleting report:', error)
+    return false
+  }
+}
+
+// Get comments by page
+export async function getCommentsByPage(page: Comment['page']): Promise<Comment[]> {
+  try {
+    const comments = await prisma.comment.findMany({
+      where: { page },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return comments.map((c) => ({
+      id: c.id,
+      page: c.page as Comment['page'],
+      author: c.author,
+      content: c.content,
+      timestamp: c.createdAt,
+    }))
+  } catch (error) {
+    console.error('Error fetching comments:', error)
+    return []
+  }
+}
+
+// Add a comment
+export async function addComment(
+  page: Comment['page'],
+  author: string,
+  content: string
+): Promise<Comment | null> {
+  try {
+    const comment = await prisma.comment.create({
+      data: {
+        page,
+        author,
+        content,
+      },
+    })
+
+    return {
+      id: comment.id,
+      page: comment.page as Comment['page'],
+      author: comment.author,
+      content: comment.content,
+      timestamp: comment.createdAt,
+    }
+  } catch (error) {
+    console.error('Error adding comment:', error)
+    return null
+  }
+}
+
+// ============================================
+// CALCULATION FUNCTIONS
+// ============================================
+
+export const calculateNationalSummary = (reports: ChurchReport[]) => {
+  const totalRevenue = reports.reduce((sum, r) => sum + calculateTotalRevenue(r), 0)
+  const totalExpense = reports.reduce((sum, r) => sum + calculateTotalExpense(r), 0)
+  const balance = totalRevenue - totalExpense
+
+  return {
+    totalChurches: reports.length,
+    totalRevenue,
+    totalExpense,
+    balance,
+  }
+}
+
+export const getRevenueByRegion = (reports: ChurchReport[]) => {
+  const regionMap = new Map<string, number>()
+
+  reports.forEach((report) => {
+    const revenue = calculateTotalRevenue(report)
+    const current = regionMap.get(report.region) || 0
+    regionMap.set(report.region, current + revenue)
+  })
+
+  return Array.from(regionMap.entries()).map(([name, value]) => ({
+    name,
+    value,
+  }))
+}
+
+export const getChartData = (reports: ChurchReport[]) => {
+  return reports.map((report) => ({
+    name: report.churchName.replace('Igreja ', ''),
+    revenue: calculateTotalRevenue(report),
+    expense: calculateTotalExpense(report),
+  }))
+}
+
+// ============================================
+// DUMMY DATA (for seeding)
+// ============================================
+
 export const dummyReports: ChurchReport[] = [
   {
     id: 'report-001',
@@ -256,88 +465,56 @@ export const dummyReports: ChurchReport[] = [
   },
 ]
 
-// Comments storage (simulated)
-export let comments: Comment[] = [
-  {
-    id: 'comment-1',
-    page: 'landing',
-    author: 'Pastor João',
-    content: "Sistema ida ne'e diak tebes! Obrigadu.",
-    timestamp: new Date('2024-06-15T10:30:00'),
-  },
-  {
-    id: 'comment-2',
-    page: 'nasional',
-    author: 'Admin Geral',
-    content: 'Relatóriu husi Baucau tama ona. Diak!',
-    timestamp: new Date('2024-06-16T14:20:00'),
-  },
-]
-
-// Add comment function
-export const addComment = (page: Comment['page'], author: string, content: string): Comment => {
-  const newComment: Comment = {
-    id: generateId(),
-    page,
-    author,
-    content,
-    timestamp: new Date(),
+// Seed database with dummy data
+export async function seedDatabase(): Promise<void> {
+  try {
+    const existingReports = await prisma.churchReport.count()
+    
+    if (existingReports === 0) {
+      console.log('Seeding database with dummy data...')
+      
+      for (const report of dummyReports) {
+        await prisma.churchReport.create({
+          data: {
+            churchName: report.churchName,
+            region: report.region,
+            month: report.month,
+            year: report.year,
+            osanTama: {
+              create: report.osanTama.map((ot) => ({
+                deskrisaun: ot.deskrisaun,
+                montante: ot.montante,
+              })),
+            },
+            gastu: {
+              create: report.gastu.map((g) => ({
+                gastuBaSaida: g.gastuBaSaida,
+                montante: g.montante,
+              })),
+            },
+          },
+        })
+      }
+      
+      // Add sample comments
+      await prisma.comment.createMany({
+        data: [
+          {
+            page: 'landing',
+            author: 'Pastor João',
+            content: "Sistema ida ne'e diak tebes! Obrigadu.",
+          },
+          {
+            page: 'nasional',
+            author: 'Admin Geral',
+            content: 'Relatóriu husi Baucau tama ona. Diak!',
+          },
+        ],
+      })
+      
+      console.log('Database seeded successfully!')
+    }
+  } catch (error) {
+    console.error('Error seeding database:', error)
   }
-  comments = [...comments, newComment]
-  return newComment
-}
-
-// Get comments by page
-export const getCommentsByPage = (page: Comment['page']): Comment[] => {
-  return comments.filter((c) => c.page === page).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-}
-
-// Calculate national summary
-export const calculateNationalSummary = (reports: ChurchReport[]) => {
-  const totalRevenue = reports.reduce((sum, r) => sum + calculateTotalRevenue(r), 0)
-  const totalExpense = reports.reduce((sum, r) => sum + calculateTotalExpense(r), 0)
-  const balance = totalRevenue - totalExpense
-
-  return {
-    totalChurches: reports.length,
-    totalRevenue,
-    totalExpense,
-    balance,
-  }
-}
-
-// Get revenue by region for pie chart
-export const getRevenueByRegion = (reports: ChurchReport[]) => {
-  const regionMap = new Map<string, number>()
-
-  reports.forEach((report) => {
-    const revenue = calculateTotalRevenue(report)
-    const current = regionMap.get(report.region) || 0
-    regionMap.set(report.region, current + revenue)
-  })
-
-  return Array.from(regionMap.entries()).map(([name, value]) => ({
-    name,
-    value,
-  }))
-}
-
-// Get chart data for reports
-export const getChartData = (reports: ChurchReport[]) => {
-  return reports.map((report) => ({
-    name: report.churchName.replace('Igreja ', ''),
-    revenue: calculateTotalRevenue(report),
-    expense: calculateTotalExpense(report),
-  }))
-}
-
-// Format date for comments
-export const formatDateTime = (date: Date): string => {
-  return new Intl.DateTimeFormat('pt-TL', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
 }

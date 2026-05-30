@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { MessageCircle, Send, User } from 'lucide-react'
-import { Comment, addComment, getCommentsByPage, formatDateTime } from '@/lib/data'
+import { MessageCircle, Send, User, Loader2 } from 'lucide-react'
+import { formatDateTime } from '@/lib/data'
+import { useComments, useAddComment } from '@/hooks/use-data'
 import { toast } from 'sonner'
 
 interface CommentSectionProps {
@@ -16,9 +17,10 @@ interface CommentSectionProps {
 export function CommentSection({ page }: CommentSectionProps) {
   const [author, setAuthor] = useState('')
   const [content, setContent] = useState('')
-  const [commentsList, setCommentsList] = useState<Comment[]>(() => getCommentsByPage(page))
+  const { comments, loading: loadingComments, refetch } = useComments(page)
+  const { addComment, loading: submitting } = useAddComment()
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!author.trim()) {
       toast.error('Hatama naran', {
         description: 'Favor hatama naran ita boot nian',
@@ -32,12 +34,19 @@ export function CommentSection({ page }: CommentSectionProps) {
       return
     }
 
-    const newComment = addComment(page, author.trim(), content.trim())
-    setCommentsList([newComment, ...commentsList])
-    setContent('')
-    toast.success('Komentar tau ona!', {
-      description: 'Obrigadu ba komentar ita boot nian',
-    })
+    const result = await addComment(page, author.trim(), content.trim())
+    
+    if (result) {
+      setContent('')
+      refetch()
+      toast.success('Komentar tau ona!', {
+        description: 'Obrigadu ba komentar ita boot nian',
+      })
+    } else {
+      toast.error('Erro', {
+        description: 'La bele tau komentar. Tenta fali.',
+      })
+    }
   }
 
   return (
@@ -62,17 +71,27 @@ export function CommentSection({ page }: CommentSectionProps) {
             placeholder="Naran ita boot..."
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
+            disabled={submitting}
           />
           <div className="flex gap-2">
             <Input
               placeholder="Hatama komentar..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              onKeyDown={(e) => e.key === 'Enter' && !submitting && handleSubmit()}
               className="flex-1"
+              disabled={submitting}
             />
-            <Button onClick={handleSubmit} className="bg-blue-600 hover:bg-blue-700">
-              <Send className="w-4 h-4" />
+            <Button 
+              onClick={handleSubmit} 
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
@@ -80,7 +99,11 @@ export function CommentSection({ page }: CommentSectionProps) {
         {/* Comments List */}
         <div className="border-t border-gray-200 pt-4">
           <ScrollArea className="h-64">
-            {commentsList.length === 0 ? (
+            {loadingComments ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : comments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p>Seidauk iha komentar</p>
@@ -88,7 +111,7 @@ export function CommentSection({ page }: CommentSectionProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                {commentsList.map((comment) => (
+                {comments.map((comment) => (
                   <div
                     key={comment.id}
                     className="bg-gray-50 rounded-lg p-3 border border-gray-100"

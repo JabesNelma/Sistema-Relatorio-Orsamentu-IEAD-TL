@@ -1,8 +1,17 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ============================================
+// DATABASE PROVIDER CONFIGURATION
+// ============================================
+// For Supabase (PostgreSQL), change:
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+//
+// For Local Development (SQLite), change:
+//   provider = "sqlite"
+//   url      = env("DATABASE_URL")
+// ============================================
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +22,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
+// ============================================
+// CHURCH REPORT MODELS
+// ============================================
+
+model ChurchReport {
+  id          String   @id @default(cuid())
+  churchName  String
+  region      String
+  month       String
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  osanTama    OsanTama[]
+  gastu       Gastu[]
+}
+
+model OsanTama {
+  id          String   @id @default(cuid())
+  deskrisaun  String
+  montante    Float
+  reportId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relation
+  report      ChurchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+}
+
+model Gastu {
+  id            String   @id @default(cuid())
+  gastuBaSaida  String
+  montante      Float
+  reportId      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relation
+  report        ChurchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
   id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+  page      String   // 'landing', 'regional', 'nasional'
+  author    String
+  content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model Post {
+// ============================================
+// SETTINGS MODEL (for future use)
+// ============================================
+
+model Setting {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  key       String   @unique
+  value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
