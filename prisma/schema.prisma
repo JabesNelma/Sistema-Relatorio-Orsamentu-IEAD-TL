@@ -26,73 +26,63 @@ datasource db {
 // AUTH MODELS
 // ============================================
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN_REGIONAL
-  ADMIN_LOKAL
-}
-
-enum QrStatus {
-  ACTIVE
-  DISABLED
-  EXPIRED
-  USED
-}
-
+/// Application user — can be SUPER_ADMIN, ADMIN_REGIONAL, or ADMIN_LOKAL
 model User {
-  id            String     @id @default(cuid())
-  email         String?    @unique // Only for SUPER_ADMIN (Google OAuth)
-  name          String
-  role          Role       @default(ADMIN_LOKAL)
-  region        String?    // For ADMIN_REGIONAL
-  churchName    String?    // For ADMIN_LOKAL
-  isActive      Boolean    @default(true)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id         String   @id @default(cuid())
+  /// Email only set for SUPER_ADMIN (Google OAuth). Null for QR-based admins.
+  email      String?  @unique
+  name       String
+  /// 'SUPER_ADMIN' | 'ADMIN_REGIONAL' | 'ADMIN_LOKAL'
+  role       String   @default("ADMIN_LOKAL")
+  /// Region for ADMIN_REGIONAL (e.g. "Baucau")
+  region     String?
+  /// Church name for ADMIN_LOKAL
+  churchName String?
+  /// 'ACTIVE' | 'INACTIVE'
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  // Relations
-  qrCodes       QrCode[]
-  generatedQrCodes QrCode[] @relation("GeneratedQrCodes")
-  loginHistory  LoginHistory[]
+  qrCodes      QrCode[]
+  loginHistory LoginHistory[]
 }
 
+/// QR Code token for passwordless login (ADMIN_REGIONAL & ADMIN_LOKAL)
 model QrCode {
-  id            String     @id @default(cuid())
-  token         String     @unique // Secure random token encoded in QR
-  userId        String
-  status        QrStatus   @default(ACTIVE)
-  generatedBy   String     // User ID of SUPER_ADMIN who generated it
-  expiresAt     DateTime?  // Optional expiry
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  usedAt        DateTime?  // When the QR was last scanned for login
+  id         String    @id @default(cuid())
+  /// Unique secure token encoded in the QR code
+  token      String    @unique
+  userId     String
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  /// Optional expiry date — null means no expiry
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  // Relations
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  generator     User       @relation("GeneratedQrCodes", fields: [generatedBy], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([token])
 }
 
+/// Tracks every login event for audit purposes
 model LoginHistory {
-  id            String     @id @default(cuid())
-  userId        String
-  loginMethod   String     // 'google_oauth' | 'qr_code'
-  deviceInfo    String?    // User-Agent string
-  ipAddress     String?
-  success       Boolean    @default(true)
-  createdAt     DateTime   @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  /// 'GOOGLE' | 'QR_CODE'
+  method     String
+  /// User-Agent / device info
+  deviceInfo String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
 
-  // Relations
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([createdAt])
 }
 
 // ============================================
-// CHURCH REPORT MODELS (Existing)
+// CHURCH REPORT MODELS
 // ============================================
 
 model ChurchReport {
@@ -104,31 +94,30 @@ model ChurchReport {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
-  osanTama    OsanTama[]
-  gastu       Gastu[]
+  osanTama OsanTama[]
+  gastu    Gastu[]
 }
 
 model OsanTama {
-  id          String   @id @default(cuid())
-  deskrisaun  String
-  montante    Float
-  reportId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  deskrisaun String
+  montante   Float
+  reportId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  report      ChurchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report ChurchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }
 
 model Gastu {
-  id            String   @id @default(cuid())
-  gastuBaSaida  String
-  montante      Float
-  reportId      String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  gastuBaSaida String
+  montante     Float
+  reportId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  report        ChurchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report ChurchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }
 
 model Comment {

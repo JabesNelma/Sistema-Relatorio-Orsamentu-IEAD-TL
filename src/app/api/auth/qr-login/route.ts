@@ -1,125 +1,76 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
-import { setQrSessionCookie } from '@/lib/auth/session'
-
-// Note: setQrSessionCookie is async in Next.js 16 (cookies() returns a Promise)
-
 /**
  * POST /api/auth/qr-login
+ * -----------------------
+ * Verifies a QR code token and creates a session for the
+ * associated user (ADMIN_REGIONAL or ADMIN_LOKAL).
  *
- * Verifies a QR code token and logs in the associated user.
- * Sets an HTTP-only session cookie with the QR token.
- *
- * Body:
- *   { token: string }  — The token from the scanned QR code
- *
- * Flow:
- * 1. Find QrCode by token in database
- * 2. Validate: status is ACTIVE, user is active, not expired
- * 3. Set session cookie
- * 4. Record login history
- * 5. Return user info + redirect URL based on role
+ * Body: { token: string }
  */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, SessionPayload } from '@/lib/auth'
+import { verifyQrToken, recordLogin } from '@/lib/auth-queries'
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { token } = body
+    const { token } = await request.json()
 
     if (!token || typeof token !== 'string') {
       return NextResponse.json(
-        { success: false, error: 'Token_required' },
+        { success: false, error: 'Token presizu' },
         { status: 400 }
       )
     }
 
-    // Find the QR code with its associated user
-    const qrCode = await prisma.qrCode.findUnique({
-      where: { token },
-      include: { user: true },
-    })
+    // Verify the QR token against the database
+    const user = await verifyQrToken(token)
 
-    if (!qrCode) {
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Token_invalid' },
-        { status: 404 }
+        { success: false, error: 'QR Code la validu ka seidauk aktibu' },
+        { status: 401 }
       )
     }
-
-    // Validate QR status
-    if (qrCode.status !== 'ACTIVE') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `QR_${qrCode.status.toLowerCase()}`,
-        },
-        { status: 403 }
-      )
-    }
-
-    // Validate user is active
-    if (!qrCode.user.isActive) {
-      return NextResponse.json(
-        { success: false, error: 'User_inactive' },
-        { status: 403 }
-      )
-    }
-
-    // Validate expiry
-    if (qrCode.expiresAt && qrCode.expiresAt < new Date()) {
-      await prisma.qrCode.update({
-        where: { id: qrCode.id },
-        data: { status: 'EXPIRED' },
-      })
-      return NextResponse.json(
-        { success: false, error: 'QR_expired' },
-        { status: 403 }
-      )
-    }
-
-    // Set the session cookie
-    await setQrSessionCookie(token)
-
-    // Update QR code: mark as used
-    await prisma.qrCode.update({
-      where: { id: qrCode.id },
-      data: { usedAt: new Date() },
-    })
 
     // Record login history
     const userAgent = request.headers.get('user-agent') || 'Unknown'
-    await prisma.loginHistory.create({
-      data: {
-        userId: qrCode.user.id,
-        loginMethod: 'qr_code',
-        deviceInfo: userAgent,
-        ipAddress: request.headers.get('x-forwarded-for') || null,
-        success: true,
-      },
+    const ip = request.headers.get('x-forwarded-for') || 'Unknown'
+    await recordLogin({
+      userId: user.id,
+      method: 'QR_CODE',
+      deviceInfo: userAgent,
+      ipAddress: ip,
     })
 
-    // Determine redirect URL based on role
-    const redirectUrl =
-      qrCode.user.role === 'ADMIN_REGIONAL'
-        ? '/regional'
-        : qrCode.user.role === 'ADMIN_LOKAL'
-        ? '/lokal'
-        : '/admin/manage'
+    // Create session JWT
+    const sessionPayload: SessionPayload = {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role as SessionPayload['role'],
+      region: user.region,
+      churchName: user.churchName,
+    }
+    const sessionToken = await createSessionToken(sessionPayload)
 
-    return NextResponse.json({
+    // Set cookie
+    const response = NextResponse.json({
       success: true,
-      user: {
-        id: qrCode.user.id,
-        name: qrCode.user.name,
-        role: qrCode.user.role,
-        region: qrCode.user.region,
-        churchName: qrCode.user.churchName,
-      },
-      redirect: redirectUrl,
+      user: sessionPayload,
     })
+    response.cookies.set(SESSION_COOKIE, sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: SESSION_MAX_AGE,
+      path: '/',
+    })
+
+    return response
   } catch (error) {
     console.error('QR login error:', error)
     return NextResponse.json(
-      { success: false, error: 'Login_failed' },
+      { success: false, error: 'La bele login ho QR Code' },
       { status: 500 }
     )
   }

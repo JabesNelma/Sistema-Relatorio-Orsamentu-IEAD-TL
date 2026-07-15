@@ -1,32 +1,16 @@
 'use client'
 
-import { Church, Building2, Shield, LogOut, User as UserIcon } from 'lucide-react'
+import { Church, Building2, Shield, LogIn, LogOut } from 'lucide-react'
 import { RoleCard } from '@/components/RoleCard'
 import { CommentSection } from '@/components/CommentSection'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ROLE_LABELS, ROLE_COLORS } from '@/lib/auth/types'
-import Link from 'next/link'
-import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
   const { user, loading, logout } = useAuth()
   const router = useRouter()
-
-  // If authenticated, redirect to appropriate dashboard
-  useEffect(() => {
-    if (!loading && user) {
-      if (user.role === 'SUPER_ADMIN') {
-        router.push('/admin/manage')
-      } else if (user.role === 'ADMIN_REGIONAL') {
-        router.push('/regional')
-      } else if (user.role === 'ADMIN_LOKAL') {
-        router.push('/lokal')
-      }
-    }
-  }, [user, loading, router])
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
@@ -58,6 +42,53 @@ export default function HomePage() {
               <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
               Versão 1.0 - Live Demo
             </div>
+
+            {/* User Status */}
+            {!loading && user && (
+              <div className="mt-4 inline-flex items-center gap-3 bg-white border border-gray-200 px-4 py-2 rounded-lg shadow-sm">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-medium text-blue-700">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'ADMIN_REGIONAL' ? 'Admin Regional' : 'Admin Lokal'}
+                  </p>
+                </div>
+                {user.role === 'SUPER_ADMIN' && (
+                  <Button
+                    size="sm"
+                    onClick={() => router.push('/admin/manage')}
+                    className="bg-purple-600 hover:bg-purple-700 ml-2"
+                  >
+                    <Shield className="w-4 h-4 mr-1" />
+                    Maneja Admin
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => logout()}
+                  className="text-red-500 hover:bg-red-50"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+
+            {!loading && !user && (
+              <div className="mt-4">
+                <Button
+                  onClick={() => router.push('/login')}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Login
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -74,34 +105,6 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Auth status display */}
-          {!loading && user ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-              <p className="text-sm text-blue-700 mb-3">
-                Ita boot tama ona. Fila ba dashboard:
-              </p>
-              <div className="flex items-center justify-center gap-3 flex-wrap">
-                <Badge className={ROLE_COLORS[user.role]}>
-                  <UserIcon className="w-3 h-3 mr-1" />
-                  {user.name} - {ROLE_LABELS[user.role]}
-                </Badge>
-                <Button size="sm" variant="outline" onClick={logout}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sai
-                </Button>
-              </div>
-            </div>
-          ) : !loading ? (
-            <div className="text-center">
-              <Link href="/login">
-                <Button variant="outline" className="mb-4">
-                  <Shield className="w-4 h-4 mr-2" />
-                  Tama Sistema (Login)
-                </Button>
-              </Link>
-            </div>
-          ) : null}
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <RoleCard
               icon={Building2}
@@ -116,6 +119,28 @@ export default function HomePage() {
               href="/lokal"
             />
           </div>
+
+          {/* Super Admin Access */}
+          {!loading && user?.role === 'SUPER_ADMIN' && (
+            <div className="mt-6">
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 text-center">
+                <div className="mx-auto w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-3">
+                  <Shield className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="font-semibold text-purple-900 mb-1">Super Admin Panel</h3>
+                <p className="text-sm text-purple-600 mb-4">
+                  Maneja admin hotu-hotu, generate QR Code, no haree login history.
+                </p>
+                <Button
+                  onClick={() => router.push('/admin/manage')}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Tama iha Maneja Admin
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Comment Section */}
           <div className="mt-8">

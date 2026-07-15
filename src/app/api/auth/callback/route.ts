@@ -1,73 +1,89 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/auth/supabase-server'
-import { getOrCreateSuperAdmin } from '@/lib/auth/session'
-import { prisma } from '@/lib/db'
-
 /**
- * GET /api/auth/callback
- *
- * Handles the Google OAuth callback from Supabase.
- * After Supabase authenticates the user, this route:
- * 1. Gets the user email from Supabase
- * 2. Checks if email matches SUPER_ADMIN_EMAIL env var
- * 3. Creates or updates the User in our database as SUPER_ADMIN
- * 4. Records login history
- * 5. Redirects to /admin/manage
+ * GET /api/auth/callback?code=XXX
+ * -------------------------------
+ * Supabase redirects here after Google OAuth.
+ * We exchange the code for user data, verify the email is the
+ * designated SUPER_ADMIN, then create our own JWT session cookie.
  */
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url)
-  const code = requestUrl.searchParams.get('code')
-  const redirectParam = requestUrl.searchParams.get('redirect') || '/admin/manage'
 
+import { NextRequest, NextResponse } from 'next/server'
+import { exchangeCodeForUser } from '@/lib/supabase'
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, SessionPayload } from '@/lib/auth'
+import { findOrCreateSuperAdmin, recordLogin } from '@/lib/auth-queries'
+
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const { searchParams, origin } = new URL(request.url)
+    const code = searchParams.get('code')
 
-    // Exchange code for session (Supabase handles this)
-    if (code) {
-      await supabase.auth.exchangeCodeForSession(code)
+    if (!code) {
+      return NextResponse.redirect(new URL('/login?error=no_code', origin))
     }
 
-    // Get the authenticated user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    // Exchange code for Supabase session
+    const data = await exchangeCodeForUser(code)
+    const supabaseUser = data.user
 
-    if (!user?.email) {
-      return NextResponse.redirect(new URL('/login?error=no_email', requestUrl.origin))
+    if (!supabaseUser || !supabaseUser.email) {
+      return NextResponse.redirect(new URL('/login?error=no_user', origin))
     }
 
-    // Try to create/get super admin
-    const superAdmin = await getOrCreateSuperAdmin(
-      user.email,
-      user.user_metadata?.full_name || user.email
-    )
-
-    if (!superAdmin) {
-      // Email doesn't match configured SUPER_ADMIN_EMAIL
-      await supabase.auth.signOut()
+    // Check if this email is the designated super admin
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL
+    if (supabaseUser.email !== superAdminEmail) {
       return NextResponse.redirect(
-        new URL('/login?error=not_authorized', requestUrl.origin)
+        new URL('/login?error=not_authorized', origin)
+      )
+    }
+
+    // Find or create the SUPER_ADMIN user in our DB
+    const name =
+      supabaseUser.user_metadata?.full_name ||
+      supabaseUser.user_metadata?.name ||
+      supabaseUser.email
+    const user = await findOrCreateSuperAdmin(supabaseUser.email, name)
+
+    if (!user) {
+      return NextResponse.redirect(
+        new URL('/login?error=not_authorized', origin)
       )
     }
 
     // Record login history
     const userAgent = request.headers.get('user-agent') || 'Unknown'
-    await prisma.loginHistory.create({
-      data: {
-        userId: superAdmin.id,
-        loginMethod: 'google_oauth',
-        deviceInfo: userAgent,
-        ipAddress: request.headers.get('x-forwarded-for') || null,
-        success: true,
-      },
+    const ip = request.headers.get('x-forwarded-for') || 'Unknown'
+    await recordLogin({
+      userId: user.id,
+      method: 'GOOGLE',
+      deviceInfo: userAgent,
+      ipAddress: ip,
     })
 
-    // Redirect to admin dashboard
-    return NextResponse.redirect(new URL(redirectParam, requestUrl.origin))
+    // Create session JWT
+    const sessionPayload: SessionPayload = {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role as SessionPayload['role'],
+      region: user.region,
+      churchName: user.churchName,
+    }
+    const token = await createSessionToken(sessionPayload)
+
+    // Set cookie and redirect to admin dashboard
+    const response = NextResponse.redirect(new URL('/admin/manage', origin))
+    response.cookies.set(SESSION_COOKIE, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: SESSION_MAX_AGE,
+      path: '/',
+    })
+
+    return response
   } catch (error) {
-    console.error('OAuth callback error:', error)
-    return NextResponse.redirect(
-      new URL('/login?error=callback_failed', requestUrl.origin)
-    )
+    console.error('Auth callback error:', error)
+    const { origin } = new URL(request.url)
+    return NextResponse.redirect(new URL('/login?error=callback_failed', origin))
   }
 }

@@ -1,90 +1,105 @@
-import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-
 /**
- * Middleware for route protection and Supabase session refresh.
+ * Proxy (Middleware) — Route Protection
+ * -------------------------------------
+ * In Next.js 16, middleware is called "proxy".
  *
- * Protected routes:
- * - /admin/*          → SUPER_ADMIN only
- * - /regional         → ADMIN_REGIONAL or SUPER_ADMIN
- * - /lokal            → ADMIN_LOKAL or SUPER_ADMIN
- * - /nasional         → ADMIN_REGIONAL or SUPER_ADMIN
+ * Verifies the JWT session cookie and redirects unauthenticated
+ * users to /login. Protected routes require specific roles.
  *
- * Public routes:
- * - /                 → Landing page
- * - /login            → Login page
- * - /qr-login         → QR login page
- * - /api/auth/*       → Auth API routes
- * - /api/public/*     → Public API routes
+ * Public routes:  /, /login
+ * All /api/ routes pass through (they handle their own auth).
+ * Page routes are protected based on role.
  */
+
+import { NextResponse, type NextRequest } from 'next/server'
+import { SESSION_COOKIE, verifySessionToken, UserRole } from '@/lib/auth'
+
+// ============================================
+// ROUTE CONFIGURATION
+// ============================================
+
+const PUBLIC_ROUTES = ['/', '/login']
+
+interface RouteRule {
+  pattern: RegExp
+  roles: UserRole[]
+}
+
+const PROTECTED_ROUTES: RouteRule[] = [
+  { pattern: /^\/admin\/manage/, roles: ['SUPER_ADMIN'] },
+  { pattern: /^\/regional/, roles: ['SUPER_ADMIN', 'ADMIN_REGIONAL'] },
+  { pattern: /^\/lokal/, roles: ['SUPER_ADMIN', 'ADMIN_LOKAL'] },
+  { pattern: /^\/nasional/, roles: ['SUPER_ADMIN', 'ADMIN_REGIONAL'] },
+]
+
+// ============================================
+// PROXY MAIN
+// ============================================
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public routes without any check
-  const publicRoutes = ['/', '/login', '/qr-login']
-  const isPublicRoute =
-    publicRoutes.includes(pathname) ||
-    pathname.startsWith('/api/') // All API routes handle their own auth
-
-  if (isPublicRoute) {
+  // Allow public routes
+  if (PUBLIC_ROUTES.includes(pathname)) {
     return NextResponse.next()
   }
 
-  // Refresh Supabase session (Google OAuth)
-  let response = NextResponse.next()
-  let googleEmail: string | null = null
-
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              request.cookies.set(name, value, options)
-              response.cookies.set(name, value, options)
-            })
-          },
-        },
-      }
-    )
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    googleEmail = user?.email || null
-  } catch {
-    // Supabase not configured — continue with QR session check
+  // Allow all API routes — they handle their own auth checks
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.next()
   }
 
-  // Check QR session cookie
-  const qrToken = request.cookies.get('siadtl-qr-session')?.value
-
-  // Determine user role for this request
-  // Note: Full role check happens in API routes / Server Components via getCurrentUser()
-  // Middleware does a lightweight check based on path prefix
-
-  // For protected routes, we need either a Google email or a QR token
-  const hasAnyAuth = googleEmail || qrToken
-
-  // If accessing protected route without any auth, redirect to login
-  const protectedRoutes = ['/admin', '/regional', '/lokal', '/nasional']
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  )
-
-  if (isProtectedRoute && !hasAnyAuth) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
+  // Check if route requires auth
+  const requiredRoles = getRequiredRoles(pathname)
+  if (!requiredRoles) {
+    // No auth required for this route
+    return NextResponse.next()
   }
 
-  return response
+  // Get session cookie
+  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value
+  if (!sessionCookie) {
+    return redirectToLogin(request, pathname)
+  }
+
+  // Verify JWT
+  const session = await verifySessionToken(sessionCookie)
+  if (!session) {
+    return redirectToLogin(request, pathname)
+  }
+
+  // Check role
+  if (!requiredRoles.includes(session.role)) {
+    // User doesn't have permission — redirect to their appropriate dashboard
+    return redirectToDashboard(request, session.role)
+  }
+
+  return NextResponse.next()
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+function getRequiredRoles(pathname: string): UserRole[] | null {
+  for (const rule of PROTECTED_ROUTES) {
+    if (rule.pattern.test(pathname)) return rule.roles
+  }
+  return null
+}
+
+function redirectToLogin(request: NextRequest, pathname: string) {
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('from', pathname)
+  return NextResponse.redirect(loginUrl)
+}
+
+function redirectToDashboard(request: NextRequest, role: UserRole) {
+  let dashboard = '/'
+  if (role === 'SUPER_ADMIN') dashboard = '/admin/manage'
+  else if (role === 'ADMIN_REGIONAL') dashboard = '/regional'
+  else if (role === 'ADMIN_LOKAL') dashboard = '/lokal'
+  return NextResponse.redirect(new URL(dashboard, request.url))
 }
 
 export const config = {
@@ -93,9 +108,8 @@ export const config = {
      * Match all request paths except for:
      * - _next/static (static files)
      * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder assets
+     * - favicon.ico, logo.svg, robots.txt
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|logo.svg|robots.txt).*)',
   ],
 }

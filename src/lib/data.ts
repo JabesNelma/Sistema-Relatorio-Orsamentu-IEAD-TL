@@ -513,7 +513,70 @@ export async function seedDatabase(): Promise<void> {
         ],
       })
       
-      console.log('Database seeded successfully!')
+      console.log('Reports seeded successfully!')
+    }
+
+    // Seed demo admin users with QR codes
+    const existingUsers = await prisma.user.count()
+    if (existingUsers === 0) {
+      console.log('Seeding demo admin users...')
+
+      // Create demo ADMIN_REGIONAL
+      const regionalAdmin = await prisma.user.create({
+        data: {
+          name: 'Pastor Francisco Baucau',
+          role: 'ADMIN_REGIONAL',
+          region: 'Baucau',
+          status: 'ACTIVE',
+          qrCodes: {
+            create: [{
+              token: 'demo-regional-token-' + Date.now(),
+              isActive: true,
+            }],
+          },
+        },
+      })
+
+      // Create demo ADMIN_LOKAL
+      const lokalAdmin = await prisma.user.create({
+        data: {
+          name: 'Diakonu Pedro Lospalos',
+          role: 'ADMIN_LOKAL',
+          churchName: 'Igreja Lospalos Centro',
+          status: 'ACTIVE',
+          qrCodes: {
+            create: [{
+              token: 'demo-lokal-token-' + Date.now(),
+              isActive: true,
+            }],
+          },
+        },
+      })
+
+      // Add login history entries
+      await prisma.loginHistory.createMany({
+        data: [
+          {
+            userId: regionalAdmin.id,
+            method: 'QR_CODE',
+            deviceInfo: 'Chrome / Windows',
+            ipAddress: '192.168.1.1',
+          },
+          {
+            userId: lokalAdmin.id,
+            method: 'QR_CODE',
+            deviceInfo: 'Safari / iPhone',
+            ipAddress: '192.168.1.2',
+          },
+        ],
+      })
+
+      console.log('Demo admin users seeded successfully!')
+      console.log('========================================')
+      console.log('Demo admins created with QR codes.')
+      console.log('To get QR tokens for testing, login as Super Admin')
+      console.log('and generate new QR codes from /admin/manage')
+      console.log('========================================')
     }
   } catch (error) {
     console.error('Error seeding database:', error)
