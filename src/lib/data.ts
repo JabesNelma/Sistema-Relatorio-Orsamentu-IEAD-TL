@@ -102,14 +102,15 @@ export const formatUSD = (amount: number): string => {
   }).format(amount)
 }
 
-export const formatDateTime = (date: Date): string => {
+export const formatDateTime = (date: Date | string): string => {
+  const d = typeof date === 'string' ? new Date(date) : date
   return new Intl.DateTimeFormat('pt-TL', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date)
+  }).format(d)
 }
 
 // ============================================

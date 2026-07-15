@@ -1,10 +1,33 @@
 'use client'
 
-import { Church, Building2 } from 'lucide-react'
+import { Church, Building2, Shield, LogOut, User as UserIcon } from 'lucide-react'
 import { RoleCard } from '@/components/RoleCard'
 import { CommentSection } from '@/components/CommentSection'
+import { useAuth } from '@/hooks/use-auth'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { ROLE_LABELS, ROLE_COLORS } from '@/lib/auth/types'
+import Link from 'next/link'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
+  const { user, loading, logout } = useAuth()
+  const router = useRouter()
+
+  // If authenticated, redirect to appropriate dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      if (user.role === 'SUPER_ADMIN') {
+        router.push('/admin/manage')
+      } else if (user.role === 'ADMIN_REGIONAL') {
+        router.push('/regional')
+      } else if (user.role === 'ADMIN_LOKAL') {
+        router.push('/lokal')
+      }
+    }
+  }, [user, loading, router])
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
       {/* Hero Section */}
@@ -50,6 +73,34 @@ export default function HomePage() {
               Hili rota ida atu tama iha sistema
             </p>
           </div>
+
+          {/* Auth status display */}
+          {!loading && user ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <p className="text-sm text-blue-700 mb-3">
+                Ita boot tama ona. Fila ba dashboard:
+              </p>
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <Badge className={ROLE_COLORS[user.role]}>
+                  <UserIcon className="w-3 h-3 mr-1" />
+                  {user.name} - {ROLE_LABELS[user.role]}
+                </Badge>
+                <Button size="sm" variant="outline" onClick={logout}>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sai
+                </Button>
+              </div>
+            </div>
+          ) : !loading ? (
+            <div className="text-center">
+              <Link href="/login">
+                <Button variant="outline" className="mb-4">
+                  <Shield className="w-4 h-4 mr-2" />
+                  Tama Sistema (Login)
+                </Button>
+              </Link>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <RoleCard
