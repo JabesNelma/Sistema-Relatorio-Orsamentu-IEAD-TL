@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthContext as useAuth } from "@/components/auth/auth-provider";
+import { signInWithGoogle } from "@/lib/auth-client";
 import { toast } from "sonner";
 
 export function LoginScreen() {
@@ -37,8 +38,12 @@ export function LoginScreen() {
 
   const handleGoogle = async () => {
     setOauthLoading(true);
-    // Redirect to Google OAuth flow
-    window.location.href = "/api/auth/google";
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setOauthLoading(false);
+      toast.error(err instanceof Error ? err.message : "Login Google gagal");
+    }
   };
 
   const handleQr = async (e: React.FormEvent) => {
