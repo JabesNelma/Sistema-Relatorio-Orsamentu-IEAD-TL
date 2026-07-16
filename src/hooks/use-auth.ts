@@ -1,91 +1,74 @@
-'use client'
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { SessionUser } from "@/lib/types";
+
+type AuthState = {
+  user: SessionUser | null;
+  loading: boolean;
+  error: string | null;
+};
 
 /**
- * useAuth — Authentication state hook
- * ------------------------------------
- * Fetches the current session from /api/auth/session and provides
- * login/logout helpers.
+ * Hook that manages the current session. On mount it fetches /api/auth/me.
+ * Provides login helpers and a logout function.
  */
+export function useAuth() {
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    loading: true,
+    error: null,
+  });
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { SessionPayload } from '@/lib/auth'
-
-interface UseAuthReturn {
-  user: SessionPayload | null
-  loading: boolean
-  loginWithGoogle: () => Promise<void>
-  loginWithQr: (token: string) => Promise<boolean>
-  logout: () => Promise<void>
-  refetch: () => Promise<void>
-}
-
-export function useAuth(): UseAuthReturn {
-  const [user, setUser] = useState<SessionPayload | null>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
-
-  const fetchSession = useCallback(async () => {
+  const refresh = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const res = await fetch('/api/auth/session')
-      const data = await res.json()
-      setUser(data.user || null)
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const data = await res.json();
+      setState({ user: data.user ?? null, loading: false, error: null });
     } catch {
-      setUser(null)
-    } finally {
-      setLoading(false)
+      setState({ user: null, loading: false, error: "Gagal memuat sesi" });
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchSession()
-  }, [fetchSession])
+    refresh();
+  }, [refresh]);
 
-  const loginWithGoogle = useCallback(async () => {
+  const loginWithQr = useCallback(async (token: string) => {
+    setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const res = await fetch('/api/auth/google', { method: 'POST' })
-      const data = await res.json()
-      if (data.success && data.url) {
-        window.location.href = data.url
-      }
-    } catch (error) {
-      console.error('Google login error:', error)
+      const res = await fetch("/api/auth/qr-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Login QR gagal");
+      await refresh();
+      return true;
+    } catch (err) {
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: err instanceof Error ? err.message : "Login QR gagal",
+      }));
+      return false;
     }
-  }, [])
-
-  const loginWithQr = useCallback(
-    async (token: string): Promise<boolean> => {
-      try {
-        const res = await fetch('/api/auth/qr-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        })
-        const data = await res.json()
-        if (data.success && data.user) {
-          setUser(data.user)
-          return true
-        }
-        return false
-      } catch {
-        return false
-      }
-    },
-    []
-  )
+  }, [refresh]);
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    setUser(null)
-    router.push('/login')
-  }, [router])
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    setState({ user: null, loading: false, error: null });
+  }, []);
 
   return {
-    user,
-    loading,
-    loginWithGoogle,
+    user: state.user,
+    loading: state.loading,
+    error: state.error,
+    refresh,
     loginWithQr,
     logout,
-    refetch: fetchSession,
-  }
+    clearError: () => setState((s) => ({ ...s, error: null })),
+  };
 }

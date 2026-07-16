@@ -1,14 +1,11 @@
-/**
- * POST /api/auth/logout
- * ---------------------
- * Clears the session cookie.
- */
+import { destroySession, errorResponse } from "@/lib/auth";
 
-import { NextResponse } from 'next/server'
-import { SESSION_COOKIE } from '@/lib/auth'
-
+/** Logout: destroy the current session. */
 export async function POST() {
-  const response = NextResponse.json({ success: true })
-  response.cookies.delete(SESSION_COOKIE)
-  return response
+  try {
+    await destroySession();
+    return Response.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err);
+  }
 }

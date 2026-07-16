@@ -1,77 +1,48 @@
+import { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { createSession, errorResponse } from "@/lib/auth";
+
 /**
- * POST /api/auth/qr-login
- * -----------------------
- * Verifies a QR code token and creates a session for the
- * associated user (ADMIN_REGIONAL or ADMIN_LOKAL).
+ * QR-code login for Admin Regional / Admin Lokal.
  *
  * Body: { token: string }
+ * The token is looked up in QrToken. If it's active and maps to a profile,
+ * we create a session and update lastUsedAt.
  */
-
-import { NextRequest, NextResponse } from 'next/server'
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, SessionPayload } from '@/lib/auth'
-import { verifyQrToken, recordLogin } from '@/lib/auth-queries'
-
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const { token } = await request.json()
-
-    if (!token || typeof token !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Token presizu' },
-        { status: 400 }
-      )
+    const body = await req.json().catch(() => ({}));
+    const token = typeof body?.token === "string" ? body.token.trim() : "";
+    if (!token) {
+      return Response.json({ error: "Token QR tidak boleh kosong" }, { status: 400 });
     }
 
-    // Verify the QR token against the database
-    const user = await verifyQrToken(token)
+    const qrToken = await db.qrToken.findUnique({
+      where: { token },
+      include: { profile: true },
+    });
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'QR Code la validu ka seidauk aktibu' },
-        { status: 401 }
-      )
+    if (!qrToken) {
+      return Response.json({ error: "Token QR tidak valid" }, { status: 404 });
+    }
+    if (!qrToken.active) {
+      return Response.json({ error: "Token QR sudah dinonaktifkan oleh Super Admin" }, { status: 403 });
+    }
+    if (!qrToken.profile.active) {
+      return Response.json({ error: "Akun pengguna tidak aktif" }, { status: 403 });
+    }
+    if (qrToken.expiresAt && qrToken.expiresAt < new Date()) {
+      return Response.json({ error: "Token QR sudah kedaluwarsa" }, { status: 403 });
     }
 
-    // Record login history
-    const userAgent = request.headers.get('user-agent') || 'Unknown'
-    const ip = request.headers.get('x-forwarded-for') || 'Unknown'
-    await recordLogin({
-      userId: user.id,
-      method: 'QR_CODE',
-      deviceInfo: userAgent,
-      ipAddress: ip,
-    })
+    await db.qrToken.update({
+      where: { id: qrToken.id },
+      data: { lastUsedAt: new Date() },
+    });
 
-    // Create session JWT
-    const sessionPayload: SessionPayload = {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role as SessionPayload['role'],
-      region: user.region,
-      churchName: user.churchName,
-    }
-    const sessionToken = await createSessionToken(sessionPayload)
-
-    // Set cookie
-    const response = NextResponse.json({
-      success: true,
-      user: sessionPayload,
-    })
-    response.cookies.set(SESSION_COOKIE, sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: SESSION_MAX_AGE,
-      path: '/',
-    })
-
-    return response
-  } catch (error) {
-    console.error('QR login error:', error)
-    return NextResponse.json(
-      { success: false, error: 'La bele login ho QR Code' },
-      { status: 500 }
-    )
+    await createSession(qrToken.profileId);
+    return Response.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err);
   }
 }

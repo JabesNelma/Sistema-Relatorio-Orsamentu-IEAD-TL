@@ -1,162 +1,63 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
-import { requireRole } from '@/lib/auth/session'
-import { Role } from '@prisma/client'
-import { z } from 'zod'
+import { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { errorResponse, requireRole } from "@/lib/auth";
 
-// Validation schema for updating a user
-const updateUserSchema = z.object({
-  name: z.string().min(2).optional(),
-  region: z.string().nullable().optional(),
-  churchName: z.string().nullable().optional(),
-  isActive: z.boolean().optional(),
-})
-
-/**
- * PATCH /api/admin/users/[id]
- *
- * Updates a user (rename, change region/church, activate/deactivate).
- * Only SUPER_ADMIN can update users.
- *
- * Body (any subset):
- *   { name?, region?, churchName?, isActive? }
- */
+/** PATCH /api/admin/users/[id] — update a user (name, active, regionId, sukuId). */
 export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole(Role.SUPER_ADMIN)
+    await requireRole("SUPER_ADMIN");
+    const { id } = await params;
+    const body = await req.json().catch(() => ({}));
 
-    const body = await request.json()
-    const validationResult = updateUserSchema.safeParse(body)
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Validation failed',
-          details: validationResult.error.flatten(),
-        },
-        { status: 400 }
-      )
-    }
-
-    // Verify user exists and is not a super admin
-    const existing = await prisma.user.findUnique({
-      where: { id: params.id },
-    })
-
+    const existing = await db.profile.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
+      return Response.json({ error: "Pengguna tidak ditemukan" }, { status: 404 });
+    }
+    if (existing.role === "SUPER_ADMIN") {
+      return Response.json({ error: "Tidak dapat mengubah Super Admin" }, { status: 403 });
     }
 
-    if (existing.role === 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Cannot modify Super Admin' },
-        { status: 400 }
-      )
+    const data: Record<string, unknown> = {};
+    if (typeof body?.name === "string" && body.name.trim()) data.name = body.name.trim();
+    if (typeof body?.active === "boolean") data.active = body.active;
+    if (body?.regionId !== undefined) {
+      const regionId = Number(body.regionId);
+      if (!Number.isNaN(regionId)) data.regionId = regionId;
+    }
+    if (body?.sukuId !== undefined) {
+      data.sukuId = body.sukuId ? Number(body.sukuId) : null;
     }
 
-    const updated = await prisma.user.update({
-      where: { id: params.id },
-      data: validationResult.data,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        region: true,
-        churchName: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    })
-
-    return NextResponse.json({ success: true, data: updated })
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'UNAUTHORIZED') {
-        return NextResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 }
-        )
-      }
-      if (error.message === 'FORBIDDEN') {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden' },
-          { status: 403 }
-        )
-      }
-    }
-    console.error('Update user error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to update user' },
-      { status: 500 }
-    )
+    await db.profile.update({ where: { id }, data });
+    return Response.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
 
-/**
- * DELETE /api/admin/users/[id]
- *
- * Deletes a user and all associated QR codes and login history.
- * Only SUPER_ADMIN can delete users.
- * Cannot delete SUPER_ADMIN accounts.
- */
+/** DELETE /api/admin/users/[id] — delete a user and their QR tokens. */
 export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole(Role.SUPER_ADMIN)
+    await requireRole("SUPER_ADMIN");
+    const { id } = await params;
 
-    const existing = await prisma.user.findUnique({
-      where: { id: params.id },
-    })
-
+    const existing = await db.profile.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
+      return Response.json({ error: "Pengguna tidak ditemukan" }, { status: 404 });
+    }
+    if (existing.role === "SUPER_ADMIN") {
+      return Response.json({ error: "Tidak dapat menghapus Super Admin" }, { status: 403 });
     }
 
-    if (existing.role === 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Cannot delete Super Admin' },
-        { status: 400 }
-      )
-    }
-
-    // Cascade delete will remove QR codes and login history
-    await prisma.user.delete({
-      where: { id: params.id },
-    })
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'UNAUTHORIZED') {
-        return NextResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 }
-        )
-      }
-      if (error.message === 'FORBIDDEN') {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden' },
-          { status: 403 }
-        )
-      }
-    }
-    console.error('Delete user error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete user' },
-      { status: 500 }
-    )
+    await db.profile.delete({ where: { id } });
+    return Response.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err);
   }
 }

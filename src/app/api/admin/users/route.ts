@@ -1,167 +1,119 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
-import { requireRole } from '@/lib/auth/session'
-import { Role } from '@prisma/client'
-import { z } from 'zod'
-
-// Validation schema for creating a new admin
-const createAdminSchema = z.object({
-  name: z.string().min(2, 'Naran tenke bele iha letra 2 ka liu'),
-  role: z.enum(['ADMIN_REGIONAL', 'ADMIN_LOKAL']),
-  region: z.string().optional(),
-  churchName: z.string().optional(),
-}).refine(
-  (data) => {
-    // ADMIN_REGIONAL requires region
-    if (data.role === 'ADMIN_REGIONAL' && !data.region) return false
-    // ADMIN_LOKAL requires churchName
-    if (data.role === 'ADMIN_LOKAL' && !data.churchName) return false
-    return true
-  },
-  {
-    message: 'Region ka Naran Igreja presiza depende ba role',
-  }
-)
+import { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { errorResponse, requireRole } from "@/lib/auth";
+import type { AdminUser, Role } from "@/lib/types";
 
 /**
- * GET /api/admin/users
- *
- * Returns all admin users (excluding SUPER_ADMIN who is managed separately).
- * Only SUPER_ADMIN can access this endpoint.
- *
- * Returns: List of admins with their QR code status
+ * GET /api/admin/users — list all non-super-admin users (for Super Admin).
+ * Optional ?role=ADMIN_REGIONAL|ADMIN_LOKAL filter.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    await requireRole(Role.SUPER_ADMIN)
+    await requireRole("SUPER_ADMIN");
+    const roleParam = req.nextUrl.searchParams.get("role") as Role | null;
 
-    const users = await prisma.user.findMany({
+    const profiles = await db.profile.findMany({
       where: {
-        role: { in: ['ADMIN_REGIONAL', 'ADMIN_LOKAL'] },
+        role: { not: "SUPER_ADMIN" },
+        ...(roleParam ? { role: roleParam } : {}),
       },
       include: {
-        qrCodes: {
-          orderBy: { createdAt: 'desc' },
-          take: 1, // Get the most recent QR code
-        },
+        region: true,
+        suku: true,
+        tokens: { orderBy: { createdAt: "desc" } },
       },
-      orderBy: { createdAt: 'desc' },
-    })
+      orderBy: { createdAt: "desc" },
+    });
 
-    const result = users.map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      region: user.region,
-      churchName: user.churchName,
-      isActive: user.isActive,
-      createdAt: user.createdAt,
-      qrCode: user.qrCodes[0]
-        ? {
-            id: user.qrCodes[0].id,
-            status: user.qrCodes[0].status,
-            createdAt: user.qrCodes[0].createdAt,
-          }
-        : null,
-    }))
+    const users: AdminUser[] = profiles.map((p) => ({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      role: p.role as Role,
+      active: p.active,
+      regionId: p.regionId,
+      regionName: p.region?.name ?? null,
+      sukuId: p.sukuId,
+      sukuName: p.suku?.name ?? null,
+      createdAt: p.createdAt.toISOString(),
+      qrTokens: p.tokens.map((t) => ({
+        id: t.id,
+        token: t.token,
+        label: t.label,
+        active: t.active,
+        createdAt: t.createdAt.toISOString(),
+        lastUsedAt: t.lastUsedAt ? t.lastUsedAt.toISOString() : null,
+      })),
+    }));
 
-    return NextResponse.json({ success: true, data: result })
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'UNAUTHORIZED') {
-        return NextResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 }
-        )
-      }
-      if (error.message === 'FORBIDDEN') {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden - Super Admin only' },
-          { status: 403 }
-        )
-      }
-    }
-    console.error('Get users error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch users' },
-      { status: 500 }
-    )
+    return Response.json({ users });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
 
 /**
- * POST /api/admin/users
- *
- * Creates a new admin user (ADMIN_REGIONAL or ADMIN_LOKAL).
- * Only SUPER_ADMIN can create new admins.
- *
- * Body:
- *   { name, role, region?, churchName? }
+ * POST /api/admin/users — create a new Admin Regional or Admin Lokal.
+ * Body: { name, role, regionId, sukuId?, active? }
+ * Also generates an initial QR token for the new user.
  */
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const superAdmin = await requireRole(Role.SUPER_ADMIN)
+    await requireRole("SUPER_ADMIN");
+    const body = await req.json().catch(() => ({}));
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const role = body?.role as Role | undefined;
+    const regionId = Number(body?.regionId);
+    const sukuId = body?.sukuId ? Number(body.sukuId) : null;
 
-    const body = await request.json()
-
-    // Validate input with Zod
-    const validationResult = createAdminSchema.safeParse(body)
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Validation_failed',
-          details: validationResult.error.flatten(),
-        },
-        { status: 400 }
-      )
+    if (!name) {
+      return Response.json({ error: "Nama wajib diisi" }, { status: 400 });
+    }
+    if (role !== "ADMIN_REGIONAL" && role !== "ADMIN_LOKAL") {
+      return Response.json({ error: "Role tidak valid" }, { status: 400 });
+    }
+    if (!regionId || Number.isNaN(regionId)) {
+      return Response.json({ error: "Region wajib dipilih" }, { status: 400 });
+    }
+    if (role === "ADMIN_LOKAL" && (!sukuId || Number.isNaN(sukuId))) {
+      return Response.json({ error: "Suku wajib dipilih untuk Admin Lokal" }, { status: 400 });
     }
 
-    const { name, role, region, churchName } = validationResult.data
+    // Validate region/suku exist and match.
+    const region = await db.region.findUnique({ where: { id: regionId } });
+    if (!region) {
+      return Response.json({ error: "Region tidak ditemukan" }, { status: 400 });
+    }
+    if (sukuId) {
+      const suku = await db.suku.findUnique({ where: { id: sukuId } });
+      if (!suku || suku.regionId !== regionId) {
+        return Response.json({ error: "Suku tidak cocok dengan region" }, { status: 400 });
+      }
+    }
 
-    // Create the user
-    const newUser = await prisma.user.create({
+    const profile = await db.profile.create({
       data: {
         name,
         role,
-        region: role === 'ADMIN_REGIONAL' ? region : null,
-        churchName: role === 'ADMIN_LOKAL' ? churchName : null,
-        isActive: true,
+        regionId,
+        sukuId: role === "ADMIN_LOKAL" ? sukuId : null,
+        active: body?.active !== false,
       },
-    })
+    });
 
-    return NextResponse.json({
-      success: true,
+    // Generate an initial QR token.
+    const { randomBytes } = await import("crypto");
+    const token = await db.qrToken.create({
       data: {
-        id: newUser.id,
-        name: newUser.name,
-        role: newUser.role,
-        region: newUser.region,
-        churchName: newUser.churchName,
-        isActive: newUser.isActive,
-        createdAt: newUser.createdAt,
+        token: randomBytes(24).toString("hex"),
+        profileId: profile.id,
+        label: `QR ${name}`,
+        active: true,
       },
-    })
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'UNAUTHORIZED') {
-        return NextResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 }
-        )
-      }
-      if (error.message === 'FORBIDDEN') {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden - Super Admin only' },
-          { status: 403 }
-        )
-      }
-    }
-    console.error('Create user error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create user' },
-      { status: 500 }
-    )
+    });
+
+    return Response.json({ profileId: profile.id, tokenId: token.id }, { status: 201 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
