@@ -1,0 +1,143 @@
+// Prisma schema for Church Financial Reporting System (Laporan Keuangan Gereja)
+// Roles: SUPER_ADMIN -> creates REGIONAL_ADMIN -> creates LOCAL_ADMIN -> inputs transactions
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  REGIONAL_ADMIN
+  LOCAL_ADMIN
+}
+
+enum TransactionType {
+  CASH_IN  // Uang masuk
+  CASH_OUT // Uang keluar
+  REVENUE  // Pendapatan
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(LOCAL_ADMIN)
+  phone        String?
+  active       Boolean  @default(true)
+
+  // A regional admin belongs to a region (created by super admin)
+  regionId String?
+  region   Region? @relation("RegionAdmins", fields: [regionId], references: [id], onDelete: SetNull)
+
+  // A local admin belongs to a local church (created by regional admin)
+  localId String?
+  local   Local? @relation("LocalAdmins", fields: [localId], references: [id], onDelete: SetNull)
+
+  // The admin who created this user (super admin -> regional admin, or regional admin -> local admin)
+  createdById String?
+  createdBy   User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[] @relation("UserCreatedBy")
+
+  // Regions created by this user (when super admin creates a region)
+  regionsCreated Region[] @relation("RegionCreator")
+  // Locals created by this user (when regional admin creates a local church)
+  localsCreated Local[] @relation("LocalCreator")
+
+  transactions Transaction[] @relation("TransactionCreator")
+  sessions     Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([regionId])
+  @@index([localId])
+}
+
+model Region {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  address     String?
+
+  // Super admin who created this region
+  createdById String?
+  createdBy   User? @relation("RegionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  admins      User[]        @relation("RegionAdmins")
+  locals      Local[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Local {
+  id       String  @id @default(cuid())
+  name     String
+  address  String?
+  regionId String
+  region   Region  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  // Regional admin who created this local church
+  createdById String?
+  createdBy   User? @relation("LocalCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  admins       User[]        @relation("LocalAdmins")
+  transactions Transaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([regionId])
+}
+
+model Transaction {
+  id      String          @id @default(cuid())
+  localId String
+  local   Local           @relation(fields: [localId], references: [id], onDelete: Cascade)
+
+  type     TransactionType
+  category String // e.g. "Persembahan", "Donasi", "Gaji", "Operasional", "Pemeliharaan"
+  amount   Float
+  description String?
+  date     DateTime
+
+  createdById String
+  createdBy   User @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([localId])
+  @@index([type])
+  @@index([date])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

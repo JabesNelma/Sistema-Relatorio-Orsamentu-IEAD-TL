@@ -1,0 +1,255 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-serif-display);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-emerald-deep: var(--emerald-deep);
+  --color-cream: var(--cream);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Church theme: deep emerald + warm gold + cream/ivory */
+  --gold: oklch(0.78 0.13 75);
+  --gold-soft: oklch(0.92 0.06 80);
+  --emerald-deep: oklch(0.34 0.05 165);
+  --cream: oklch(0.98 0.012 85);
+
+  --background: oklch(0.99 0.008 85);
+  --foreground: oklch(0.22 0.02 165);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 165);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 165);
+
+  /* Primary = deep emerald */
+  --primary: oklch(0.38 0.06 165);
+  --primary-foreground: oklch(0.98 0.01 85);
+
+  /* Secondary = soft gold tint */
+  --secondary: oklch(0.95 0.03 80);
+  --secondary-foreground: oklch(0.34 0.05 165);
+
+  --muted: oklch(0.96 0.01 85);
+  --muted-foreground: oklch(0.5 0.02 165);
+
+  /* Accent = warm gold */
+  --accent: oklch(0.9 0.07 78);
+  --accent-foreground: oklch(0.3 0.06 75);
+
+  --destructive: oklch(0.58 0.22 27);
+  --border: oklch(0.9 0.02 80);
+  --input: oklch(0.92 0.015 80);
+  --ring: oklch(0.55 0.1 75);
+
+  /* Chart colors - harmonious with gold/emerald theme */
+  --chart-1: oklch(0.45 0.09 165);   /* emerald */
+  --chart-2: oklch(0.72 0.12 75);    /* gold */
+  --chart-3: oklch(0.55 0.14 145);   /* teal-green */
+  --chart-4: oklch(0.65 0.18 45);    /* amber */
+  --chart-5: oklch(0.5 0.1 200);     /* slate-teal */
+
+  --sidebar: oklch(0.97 0.012 85);
+  --sidebar-foreground: oklch(0.22 0.02 165);
+  --sidebar-primary: oklch(0.38 0.06 165);
+  --sidebar-primary-foreground: oklch(0.98 0.01 85);
+  --sidebar-accent: oklch(0.93 0.04 80);
+  --sidebar-accent-foreground: oklch(0.3 0.06 75);
+  --sidebar-border: oklch(0.9 0.02 80);
+  --sidebar-ring: oklch(0.55 0.1 75);
+}
+
+.dark {
+  --gold: oklch(0.8 0.13 75);
+  --gold-soft: oklch(0.4 0.07 80);
+  --emerald-deep: oklch(0.28 0.05 165);
+  --cream: oklch(0.18 0.02 165);
+
+  --background: oklch(0.16 0.015 165);
+  --foreground: oklch(0.96 0.01 85);
+
+  --card: oklch(0.21 0.02 165);
+  --card-foreground: oklch(0.96 0.01 85);
+
+  --popover: oklch(0.21 0.02 165);
+  --popover-foreground: oklch(0.96 0.01 85);
+
+  --primary: oklch(0.7 0.1 75);
+  --primary-foreground: oklch(0.18 0.02 165);
+
+  --secondary: oklch(0.28 0.03 165);
+  --secondary-foreground: oklch(0.96 0.01 85);
+
+  --muted: oklch(0.26 0.02 165);
+  --muted-foreground: oklch(0.72 0.02 85);
+
+  --accent: oklch(0.35 0.07 75);
+  --accent-foreground: oklch(0.92 0.06 80);
+
+  --destructive: oklch(0.7 0.19 22);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.6 0.1 75);
+
+  --chart-1: oklch(0.6 0.11 165);
+  --chart-2: oklch(0.78 0.13 75);
+  --chart-3: oklch(0.65 0.15 145);
+  --chart-4: oklch(0.7 0.18 45);
+  --chart-5: oklch(0.6 0.12 200);
+
+  --sidebar: oklch(0.2 0.02 165);
+  --sidebar-foreground: oklch(0.96 0.01 85);
+  --sidebar-primary: oklch(0.7 0.1 75);
+  --sidebar-primary-foreground: oklch(0.18 0.02 165);
+  --sidebar-accent: oklch(0.28 0.03 165);
+  --sidebar-accent-foreground: oklch(0.92 0.06 80);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.6 0.1 75);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv01";
+  }
+}
+
+/* Elegant utilities */
+.text-gold {
+  color: var(--gold);
+}
+.bg-gold {
+  background-color: var(--gold);
+}
+.bg-emerald-deep {
+  background-color: var(--emerald-deep);
+}
+.bg-cream {
+  background-color: var(--cream);
+}
+
+/* Gold gradient text */
+.text-gradient-gold {
+  background: linear-gradient(120deg, var(--gold) 0%, oklch(0.85 0.1 70) 50%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Soft shadow for cards */
+.shadow-elegant {
+  box-shadow: 0 1px 3px rgba(34, 60, 50, 0.04), 0 8px 24px -8px rgba(34, 60, 50, 0.08);
+}
+.shadow-elegant-lg {
+  box-shadow: 0 4px 12px rgba(34, 60, 50, 0.06), 0 24px 48px -16px rgba(34, 60, 50, 0.14);
+}
+
+/* Hero overlay */
+.hero-overlay {
+  background: linear-gradient(180deg, rgba(20, 45, 38, 0.55) 0%, rgba(20, 45, 38, 0.75) 100%);
+}
+
+/* Decorative gold divider */
+.divider-gold {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+
+/* Subtle film grain / texture overlay */
+.texture-paper {
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(212, 165, 116, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(34, 80, 68, 0.03) 0%, transparent 50%);
+}
+
+/* Custom scrollbar */
+.scrollbar-elegant::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-elegant::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-elegant::-webkit-scrollbar-thumb {
+  background: oklch(0.85 0.05 80);
+  border-radius: 9999px;
+}
+.scrollbar-elegant::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}
+
+/* Fade-in animation */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Float animation for decorative elements */
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.animate-floaty {
+  animation: floaty 6s ease-in-out infinite;
+}
+
+/* Glow for hero text */
+.glow-gold {
+  text-shadow: 0 0 24px rgba(212, 165, 116, 0.35), 0 2px 12px rgba(0, 0, 0, 0.4);
+}
