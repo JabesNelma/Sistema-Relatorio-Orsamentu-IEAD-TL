@@ -101,3 +101,32 @@ Work Log:
 Stage Summary:
 - The "unauthorized" bug when creating regional/local admins is fixed. The session cookie is now verified (with retry) before the dashboard loads, eliminating the race condition where API calls fired before the browser committed the Set-Cookie.
 - Both super-admin email login and QR-code token login use the same robust verification flow.
+
+---
+Task ID: QR-4
+Agent: main-orchestrator
+Task: Fix "sesi gagal dibuat" error when logging in (caused by verifySession blocking on stale/async cookie)
+
+Work Log:
+- Investigated dev.log: saw repeated pattern `POST /api/auth/login 200` → `GET /api/auth/me 200` (×2) → user retries. Both /api/auth/me calls returned 200 with null user — the session cookie was NOT being sent, even after the 350ms retry in verifySession.
+- Root cause: The verifySession() approach (added in QR-3) BLOCKED the login flow on a fragile cookie round-trip. When the browser had a STALE `gereja_session` cookie (from a previous session or DB reset), it kept sending the stale cookie instead of the fresh one Set-Cookie tried to set. Both verifySession attempts read the stale cookie → session not found → null user → "Sesi gagal dibuat" toast → user blocked from entering the dashboard.
+- This was the SAME underlying race/stale-cookie condition that caused the original 401 bug; verifySession just made it worse by blocking login entirely.
+- New, more robust strategy (don't block — make fetches resilient):
+  1. Created `src/lib/api-fetch.ts` — a client-side `apiFetch()` wrapper that transparently RETRIES on 401 with increasing delays (300ms, 600ms, 1200ms). By retry #2 the browser has always committed the fresh Set-Cookie. This handles the async Set-Cookie processing WITHOUT blocking the login UX.
+  2. Reverted `src/components/auth/login-dialog.tsx` — now trusts the login response body immediately (`setUser(data.user)`) and closes the dialog. No more verifySession blocking. The dashboard's data fetches (via apiFetch) retry silently on 401.
+  3. Reverted `src/components/auth/qr-login-screen.tsx` — same pattern (trust response, no blocking).
+  4. Updated all dashboard data fetches + mutations in super-admin-dashboard, regional-admin-dashboard, and local-admin-dashboard to use `apiFetch()` instead of raw `fetch()`. This covers GET (load), POST (create), PATCH (toggle), DELETE, and the transactions filter refetch.
+  5. Hardened `src/app/api/auth/login/route.ts` — before creating a new session, it now reads any existing `gereja_session` cookie, DESTROYS that old session in the DB (if present), and CLEARS the old cookie via `clearSessionCookie()`. This eliminates stale-cookie shadowing: the fresh Set-Cookie is guaranteed to replace the stale one. Applied to BOTH email login (super admin) and token login (regional/local admins).
+  6. Simplified `src/lib/auth-store.ts` — removed the now-unused verifySession action; kept fetchUser + logout with `credentials: 'same-origin'`.
+- Agent Browser end-to-end verification (with stale cookie simulation):
+  - Set a fake stale cookie `gereja_session=STALE_INVALID_TOKEN_12345` before login.
+  - Logged in as super admin → `POST /api/auth/login 200` (old session destroyed + old cookie cleared + fresh session created + fresh cookie set) → `GET /api/admins 200` + `GET /api/regions 200` (ZERO 401s, ZERO "sesi gagal dibuat") → dashboard loaded with 2 admins → toast "Selamat datang, Super Admin Gereja!".
+  - Created a new regional admin (Test Final Admin, wilayah 3) → `POST /api/admins 200` → `GET /api/admins 200` (list refreshed) → "QR Login Dibuat" dialog appeared + "Admin wilayah berhasil dibuat" toast.
+  - Cleaned up test admin from DB.
+- Lint clean.
+
+Stage Summary:
+- "Sesi gagal dibuat" is fixed. Login no longer blocks on a fragile cookie-verification round-trip.
+- The login API now proactively destroys stale sessions + clears stale cookies before setting the fresh one, so old cookies (from DB resets or previous logins) can no longer shadow the new cookie.
+- All dashboard data fetches use apiFetch() which transparently retries on 401, making the race condition invisible to the user.
+- Both super-admin email login and QR-code token login work end-to-end.

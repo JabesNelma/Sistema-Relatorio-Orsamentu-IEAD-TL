@@ -35,7 +35,7 @@ type TokenInfo = {
 }
 
 export function QrLoginScreen({ token, onBack }: Props) {
-  const verifySession = useAuthStore((s) => s.verifySession)
+  const setUser = useAuthStore((s) => s.setUser)
   const [info, setInfo] = useState<TokenInfo | null>(null)
   const [checking, setChecking] = useState(true)
   const [password, setPassword] = useState('')
@@ -79,14 +79,10 @@ export function QrLoginScreen({ token, onBack }: Props) {
         toast.error(data.error || 'Gagal masuk')
         return
       }
-      // Verify the session cookie was committed before proceeding — the
-      // dashboard's data fetches run on mount and would 401 otherwise.
-      const verified = await verifySession()
-      if (!verified) {
-        toast.error('Sesi gagal dibuat. Silakan coba lagi.')
-        return
-      }
-      toast.success(`Selamat datang, ${verified.name}!`)
+      // Trust the login response. Dashboard fetches use apiFetch() which
+      // transparently retries on 401 while the browser commits the cookie.
+      setUser(data.user)
+      toast.success(`Selamat datang, ${data.user.name}!`)
     } catch {
       toast.error('Terjadi kesalahan jaringan')
     } finally {

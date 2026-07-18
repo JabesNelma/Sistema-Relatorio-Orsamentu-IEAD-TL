@@ -53,6 +53,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/auth-store'
 import { formatCompact, formatCurrency, formatDateShort, ROLE_LABELS, TRANSACTION_TYPE_LABELS } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/api-fetch'
 
 type LocalAdmin = {
   id: string
@@ -127,10 +128,10 @@ export function RegionalAdminDashboard() {
     setLoading(true)
     try {
       const [adminsRes, localsRes, reportRes, txRes] = await Promise.all([
-        fetch('/api/admins', { cache: 'no-store' }),
-        fetch('/api/locals', { cache: 'no-store' }),
-        fetch('/api/reports', { cache: 'no-store' }),
-        fetch('/api/transactions?limit=10', { cache: 'no-store' }),
+        apiFetch('/api/admins', { cache: 'no-store' }),
+        apiFetch('/api/locals', { cache: 'no-store' }),
+        apiFetch('/api/reports', { cache: 'no-store' }),
+        apiFetch('/api/transactions?limit=10', { cache: 'no-store' }),
       ])
       const [adminsData, localsData, reportData, txData] = await Promise.all([
         adminsRes.json(), localsRes.json(), reportRes.json(), txRes.json(),
@@ -154,7 +155,7 @@ export function RegionalAdminDashboard() {
   useEffect(() => {
     async function fetchTx() {
       const url = localFilter === 'all' ? '/api/transactions?limit=10' : `/api/transactions?localId=${localFilter}&limit=10`
-      const res = await fetch(url, { cache: 'no-store' })
+      const res = await apiFetch(url, { cache: 'no-store' })
       const data = await res.json()
       setTransactions(data.transactions || [])
     }
@@ -180,7 +181,7 @@ export function RegionalAdminDashboard() {
       const body: any = { name, password }
       if (localMode === 'existing') body.localId = localId
       else { body.localName = localName; body.localAddress = localAddress }
-      const res = await fetch('/api/admins', {
+      const res = await apiFetch('/api/admins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -219,17 +220,16 @@ export function RegionalAdminDashboard() {
   async function toggleToken(admin: LocalAdmin) {
     setToggling(admin.id)
     try {
-      const res = await fetch(`/api/admins/${admin.id}`, {
+      const res = await apiFetch(`/api/admins/${admin.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tokenActive: !admin.tokenActive }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         toast.error(data.error || 'Gagal mengubah status QR')
         return
       }
-      const data = await res.json()
       setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, tokenActive: data.user.tokenActive } : a))
       toast.success(data.user.tokenActive ? 'QR login diaktifkan' : 'QR login dimatikan — link lama tidak bisa dipakai')
     } catch {
@@ -243,7 +243,7 @@ export function RegionalAdminDashboard() {
     if (!confirm('Buat ulang link QR? Link lama akan langsung tidak berlaku.')) return
     setRegenerating(admin.id)
     try {
-      const res = await fetch(`/api/admins/${admin.id}/token`, { method: 'POST' })
+      const res = await apiFetch(`/api/admins/${admin.id}/token`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) {
         toast.error(data.error || 'Gagal membuat ulang QR')
@@ -266,17 +266,16 @@ export function RegionalAdminDashboard() {
   async function toggleActive(admin: LocalAdmin) {
     setToggling(admin.id)
     try {
-      const res = await fetch(`/api/admins/${admin.id}`, {
+      const res = await apiFetch(`/api/admins/${admin.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !admin.active }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         toast.error(data.error || 'Gagal mengubah status')
         return
       }
-      const data = await res.json()
       setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, active: data.user.active } : a))
       toast.success(data.user.active ? 'Admin diaktifkan' : 'Admin dinonaktifkan')
     } catch {
@@ -290,7 +289,7 @@ export function RegionalAdminDashboard() {
     if (!confirm('Hapus admin lokal ini secara permanen?')) return
     setDeleting(id)
     try {
-      const res = await fetch(`/api/admins/${id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/api/admins/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const data = await res.json()
         toast.error(data.error || 'Gagal menghapus')

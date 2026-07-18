@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
-import { verifyPassword, createSession, setSessionCookie, toSafeUser } from '@/lib/auth'
+import { SESSION_COOKIE, verifyPassword, createSession, setSessionCookie, clearSessionCookie, destroySession, toSafeUser } from '@/lib/auth'
 
 // POST /api/auth/login
 // Two login modes:
@@ -41,6 +42,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Password salah' }, { status: 401 })
       }
 
+      // Clean up any stale session cookie from a previous login/DB reset so it
+      // doesn't shadow the fresh cookie we're about to set.
+      const cookieStore = await cookies()
+      const oldToken = cookieStore.get(SESSION_COOKIE)?.value
+      if (oldToken && oldToken !== token) {
+        await destroySession(oldToken).catch(() => {})
+      }
+      await clearSessionCookie()
+
       const sessionToken = await createSession(user.id)
       await setSessionCookie(sessionToken)
 
@@ -76,6 +86,15 @@ export async function POST(req: NextRequest) {
     if (!valid) {
       return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 })
     }
+
+    // Clean up any stale session cookie from a previous login/DB reset so it
+    // doesn't shadow the fresh cookie we're about to set.
+    const cookieStore = await cookies()
+    const oldToken = cookieStore.get(SESSION_COOKIE)?.value
+    if (oldToken) {
+      await destroySession(oldToken).catch(() => {})
+    }
+    await clearSessionCookie()
 
     const sessionToken = await createSession(user.id)
     await setSessionCookie(sessionToken)

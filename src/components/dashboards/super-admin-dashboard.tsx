@@ -30,6 +30,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/auth-store'
 import { ROLE_LABELS } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/api-fetch'
 
 type RegionalAdmin = {
   id: string
@@ -80,8 +81,8 @@ export function SuperAdminDashboard() {
     setLoading(true)
     try {
       const [adminsRes, regionsRes] = await Promise.all([
-        fetch('/api/admins', { cache: 'no-store' }),
-        fetch('/api/regions', { cache: 'no-store' }),
+        apiFetch('/api/admins', { cache: 'no-store' }),
+        apiFetch('/api/regions', { cache: 'no-store' }),
       ])
       const adminsData = await adminsRes.json()
       const regionsData = await regionsRes.json()
@@ -110,7 +111,7 @@ export function SuperAdminDashboard() {
     }
     setSubmitting(true)
     try {
-      const res = await fetch('/api/admins', {
+      const res = await apiFetch('/api/admins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, wilayah: Number(wilayah), password }),
@@ -147,17 +148,16 @@ export function SuperAdminDashboard() {
   async function toggleActive(admin: RegionalAdmin) {
     setToggling(admin.id)
     try {
-      const res = await fetch(`/api/admins/${admin.id}`, {
+      const res = await apiFetch(`/api/admins/${admin.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !admin.active }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         toast.error(data.error || 'Gagal mengubah status')
         return
       }
-      const data = await res.json()
       setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, active: data.user.active } : a))
       toast.success(data.user.active ? 'Admin diaktifkan' : 'Admin dinonaktifkan')
     } catch {
@@ -170,17 +170,16 @@ export function SuperAdminDashboard() {
   async function toggleToken(admin: RegionalAdmin) {
     setToggling(admin.id)
     try {
-      const res = await fetch(`/api/admins/${admin.id}`, {
+      const res = await apiFetch(`/api/admins/${admin.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tokenActive: !admin.tokenActive }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         toast.error(data.error || 'Gagal mengubah status QR')
         return
       }
-      const data = await res.json()
       setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, tokenActive: data.user.tokenActive } : a))
       toast.success(data.user.tokenActive ? 'QR login diaktifkan' : 'QR login dimatikan — link lama tidak bisa dipakai')
     } catch {
@@ -194,7 +193,7 @@ export function SuperAdminDashboard() {
     if (!confirm('Buat ulang link QR? Link lama akan langsung tidak berlaku.')) return
     setRegenerating(admin.id)
     try {
-      const res = await fetch(`/api/admins/${admin.id}/token`, { method: 'POST' })
+      const res = await apiFetch(`/api/admins/${admin.id}/token`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) {
         toast.error(data.error || 'Gagal membuat ulang QR')
@@ -219,7 +218,7 @@ export function SuperAdminDashboard() {
     if (!confirm('Hapus admin ini secara permanen?')) return
     setDeleting(id)
     try {
-      const res = await fetch(`/api/admins/${id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/api/admins/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const data = await res.json()
         toast.error(data.error || 'Gagal menghapus')
