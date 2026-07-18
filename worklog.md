@@ -80,3 +80,24 @@ Work Log:
 Stage Summary:
 - All requested features working: simplified form (nama, wilayah 1-4, password), secret QR link generation, QR-based login for regional/local admins, super-admin can disable/re-enable/regenerate QR.
 - Super admin email login navigation bug also resolved.
+
+---
+Task ID: QR-3
+Agent: main-orchestrator
+Task: Fix "Unauthorized" notification when pressing "Buat Admin Wilayah" (create regional admin)
+
+Work Log:
+- Investigated dev.log: saw `POST /api/auth/login 200` immediately followed by `GET /api/admins 401`, `GET /api/regions 401`, `POST /api/admins 401` (x3). Login succeeded but subsequent API calls failed with 401.
+- Root cause: race condition. The login-dialog trusted the POST /api/auth/login response body and called `setUser(data.user)` immediately, rendering the dashboard. The dashboard's `useEffect` then fired `fetchData()` which called `/api/admins` and `/api/regions` BEFORE the browser had finished committing the `Set-Cookie` header to its cookie store. Those requests went out without the session cookie → 401.
+- Confirmed via curl that the API + cookie + DB all work correctly in isolation (login sets cookie, cookie authorizes /api/admins). The bug was purely a client-side timing issue.
+- Agent Browser reproduced: after clearing cookies and logging in fresh, GET /api/admins returned 200 (cookie was sent). The 401s only happened when the dashboard mounted too fast after login.
+- Fix applied:
+  1. `src/lib/auth-store.ts`: added `verifySession()` action that calls `/api/auth/me` to confirm the session cookie is actually committed. Retries once after 350ms if the first call returns null (handles async Set-Cookie processing). Also added `credentials: 'same-origin'` to all internal fetches.
+  2. `src/components/auth/login-dialog.tsx`: after `POST /api/auth/login` returns 200, calls `verifySession()` instead of blindly trusting the response body. Only closes the dialog + shows the dashboard after the session is verified. If verification fails after retry, shows "Sesi gagal dibuat. Silakan coba lagi." instead of a broken dashboard.
+  3. `src/components/auth/qr-login-screen.tsx`: same pattern — verifies session via `verifySession()` before showing the success toast / proceeding to the dashboard.
+- Agent Browser end-to-end verification: cleared cookies → login as super admin → `POST /api/auth/login 200` → `GET /api/auth/me 200` (verifySession) → dashboard loaded → `GET /api/admins 200` + `GET /api/regions 200` (no 401!) → filled form (nama, wilayah 4, password) → `POST /api/admins 200` (admin created!) → `GET /api/admins 200` (list refreshed) → QR Login dialog appeared. Zero 401 errors.
+- Lint clean. Test admin cleaned up from DB.
+
+Stage Summary:
+- The "unauthorized" bug when creating regional/local admins is fixed. The session cookie is now verified (with retry) before the dashboard loads, eliminating the race condition where API calls fired before the browser committed the Set-Cookie.
+- Both super-admin email login and QR-code token login use the same robust verification flow.

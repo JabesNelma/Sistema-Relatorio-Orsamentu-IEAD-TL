@@ -24,7 +24,7 @@ export function LoginDialog({ open, onOpenChange }: Props) {
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
-  const setUser = useAuthStore((s) => s.setUser)
+  const verifySession = useAuthStore((s) => s.verifySession)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -37,6 +37,7 @@ export function LoginDialog({ open, onOpenChange }: Props) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email, password }),
       })
       const data = await res.json()
@@ -44,10 +45,17 @@ export function LoginDialog({ open, onOpenChange }: Props) {
         toast.error(data.error || 'Gagal masuk')
         return
       }
-      // Gunakan data user langsung dari respons login (lebih andal daripada
-      // request kedua ke /api/auth/me yang bisa gagal jika cookie belum commit).
-      setUser(data.user)
-      toast.success(`Selamat datang, ${data.user.name}!`)
+      // Verify the session cookie was actually committed by the browser
+      // before closing the dialog. The dashboard's data-fetching useEffect
+      // runs immediately on mount — if the cookie isn't stored yet, those
+      // requests return 401 ("Unauthorized"). verifySession retries once
+      // after a short delay to handle the async Set-Cookie processing.
+      const verified = await verifySession()
+      if (!verified) {
+        toast.error('Sesi gagal dibuat. Silakan coba lagi.')
+        return
+      }
+      toast.success(`Selamat datang, ${verified.name}!`)
       onOpenChange(false)
       setEmail('')
       setPassword('')
