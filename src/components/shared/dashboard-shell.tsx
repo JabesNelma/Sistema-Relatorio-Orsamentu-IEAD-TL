@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/auth-store'
 import { ROLE_LABELS } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { LoginDialog } from '@/components/auth/login-dialog'
 
 type Props = {
@@ -23,10 +24,14 @@ const roleBadgeClass: Record<string, string> = {
 export function DashboardShell({ children, accent = 'emerald' }: Props) {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const router = useRouter()
   const [loginOpen, setLoginOpen] = useState(false)
 
   async function handleLogout() {
     await logout()
+    // Clear any ?token= query so the QR login screen doesn't immediately
+    // reappear for regional/local admins who logged in via a QR link.
+    router.push('/')
     setLoginOpen(true)
   }
 

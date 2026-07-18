@@ -1,174 +1,143 @@
 import { db } from '../src/lib/db'
-import { hashPassword } from '../src/lib/auth'
+import { hashPassword, generateLoginToken } from '../src/lib/auth'
 
 async function main() {
   console.log('🌱 Seeding database...')
 
-  // 1. Create default Super Admin
-  const superAdminEmail = 'superadmin@gereja.id'
-  const existingSuper = await db.user.findUnique({ where: { email: superAdminEmail } })
-  if (!existingSuper) {
-    const superAdmin = await db.user.create({
-      data: {
-        email: superAdminEmail,
-        name: 'Super Admin Gereja',
-        passwordHash: await hashPassword('superadmin123'),
-        role: 'SUPER_ADMIN',
-      },
-    })
-    console.log(`✅ Created Super Admin: ${superAdmin.email} / superadmin123`)
+  // Wipe existing data so re-seeding produces clean tokens & regions.
+  await db.session.deleteMany()
+  await db.transaction.deleteMany()
+  await db.user.deleteMany()
+  await db.local.deleteMany()
+  await db.region.deleteMany()
 
-    // 2. Create a Region
-    const region = await db.region.create({
-      data: {
-        name: 'Wilayah Jakarta',
-        description: 'Wilayah gereja DKI Jakarta',
-        address: 'Jakarta, Indonesia',
-        createdById: superAdmin.id,
-      },
-    })
-    console.log(`✅ Created Region: ${region.name}`)
+  // 1. Create default Super Admin (logs in with email + password, no QR token)
+  const superAdmin = await db.user.create({
+    data: {
+      email: 'superadmin@gereja.id',
+      name: 'Super Admin Gereja',
+      passwordHash: await hashPassword('superadmin123'),
+      role: 'SUPER_ADMIN',
+    },
+  })
+  console.log(`✅ Super Admin: ${superAdmin.email} / superadmin123`)
 
-    // 3. Create Regional Admin for that region
-    const regionalAdmin = await db.user.create({
-      data: {
-        email: 'regional@gereja.id',
-        name: 'Admin Wilayah Jakarta',
-        passwordHash: await hashPassword('regional123'),
-        role: 'REGIONAL_ADMIN',
-        regionId: region.id,
-        createdById: superAdmin.id,
-      },
-    })
-    console.log(`✅ Created Regional Admin: ${regionalAdmin.email} / regional123`)
+  // 2. Create 4 regions (Wilayah 1 - Wilayah 4)
+  const regionNames = ['Wilayah 1', 'Wilayah 2', 'Wilayah 3', 'Wilayah 4']
+  const regions = await Promise.all(
+    regionNames.map((name) =>
+      db.region.create({
+        data: {
+          name,
+          description: `Wilayah gereja ${name}`,
+          createdById: superAdmin.id,
+        },
+      })
+    )
+  )
+  console.log(`✅ Created ${regions.length} regions (Wilayah 1-4)`)
 
-    // 4. Create Local churches under the region
-    const local1 = await db.local.create({
-      data: {
-        name: 'Gereja Lokal Jakarta Pusat',
-        address: 'Jl. Medan Merdeka, Jakarta Pusat',
-        regionId: region.id,
-        createdById: regionalAdmin.id,
-      },
-    })
-    const local2 = await db.local.create({
-      data: {
-        name: 'Gereja Lokal Jakarta Selatan',
-        address: 'Jl. Sudirman, Jakarta Selatan',
-        regionId: region.id,
-        createdById: regionalAdmin.id,
-      },
-    })
-    console.log(`✅ Created Locals: ${local1.name}, ${local2.name}`)
+  // 3. Create a Regional Admin for Wilayah 1 (logs in via QR token)
+  const regionalToken = generateLoginToken()
+  const regionalAdmin = await db.user.create({
+    data: {
+      email: 'regional.wilayah1@gereja.internal',
+      name: 'Admin Wilayah 1',
+      passwordHash: await hashPassword('regional123'),
+      role: 'REGIONAL_ADMIN',
+      regionId: regions[0].id,
+      createdById: superAdmin.id,
+      loginToken: regionalToken,
+      tokenActive: true,
+      tokenCreatedAt: new Date(),
+    },
+  })
+  console.log(`✅ Regional Admin: ${regionalAdmin.name} / regional123`)
+  console.log(`   🔑 Login link: /?token=${regionalToken}`)
 
-    // 5. Create Local Admins
-    const localAdmin1 = await db.user.create({
-      data: {
-        email: 'lokal.pusat@gereja.id',
-        name: 'Admin Lokal Jakarta Pusat',
-        passwordHash: await hashPassword('lokal123'),
-        role: 'LOCAL_ADMIN',
-        localId: local1.id,
-        regionId: region.id,
-        createdById: regionalAdmin.id,
-      },
-    })
-    const localAdmin2 = await db.user.create({
-      data: {
-        email: 'lokal.selatan@gereja.id',
-        name: 'Admin Lokal Jakarta Selatan',
-        passwordHash: await hashPassword('lokal123'),
-        role: 'LOCAL_ADMIN',
-        localId: local2.id,
-        regionId: region.id,
-        createdById: regionalAdmin.id,
-      },
-    })
-    console.log(`✅ Created Local Admins:`)
-    console.log(`   - ${localAdmin1.email} / lokal123`)
-    console.log(`   - ${localAdmin2.email} / lokal123`)
+  // 4. Create Local churches under Wilayah 1
+  const local1 = await db.local.create({
+    data: {
+      name: 'Gereja Lokal Pusat',
+      address: 'Jl. Medan Merdeka, Jakarta Pusat',
+      regionId: regions[0].id,
+      createdById: regionalAdmin.id,
+    },
+  })
+  const local2 = await db.local.create({
+    data: {
+      name: 'Gereja Lokal Selatan',
+      address: 'Jl. Sudirman, Jakarta Selatan',
+      regionId: regions[0].id,
+      createdById: regionalAdmin.id,
+    },
+  })
+  console.log(`✅ Locals: ${local1.name}, ${local2.name}`)
 
-    // 6. Seed sample transactions for the past 6 months
-    const categories = {
-      CASH_IN: ['Persembahan Minggu', 'Donasi Jemaat', 'Sumbangan Khusus'],
-      CASH_OUT: ['Gaji Pegawai', 'Biaya Operasional', 'Pemeliharaan Gedung', 'Listrik & Air'],
-      REVENUE: ['Pendapatan Kegiatan', 'Penjualan Buku Rohani', 'Sewa Ruangan'],
-    }
-    const now = new Date()
-    const txs: any[] = []
-    for (let m = 5; m >= 0; m--) {
-      for (let day = 1; day <= 4; day++) {
-        const month = now.getMonth() - m
-        const dateObj = new Date(now.getFullYear(), month, day * 7)
-        txs.push({
-          localId: local1.id,
-          type: 'CASH_IN',
-          category: categories.CASH_IN[day % 3],
-          amount: 1500000 + Math.round(Math.random() * 2000000),
-          description: 'Persembahan ibadah minggu',
-          date: dateObj,
-          createdById: localAdmin1.id,
-        })
-        txs.push({
-          localId: local1.id,
-          type: 'CASH_OUT',
-          category: categories.CASH_OUT[day % 4],
-          amount: 500000 + Math.round(Math.random() * 1500000),
-          description: 'Pengeluaran rutin',
-          date: dateObj,
-          createdById: localAdmin1.id,
-        })
-        txs.push({
-          localId: local1.id,
-          type: 'REVENUE',
-          category: categories.REVENUE[day % 3],
-          amount: 800000 + Math.round(Math.random() * 1200000),
-          description: 'Pendapatan kegiatan',
-          date: dateObj,
-          createdById: localAdmin1.id,
-        })
-        txs.push({
-          localId: local2.id,
-          type: 'CASH_IN',
-          category: categories.CASH_IN[day % 3],
-          amount: 1200000 + Math.round(Math.random() * 1800000),
-          description: 'Persembahan ibadah',
-          date: dateObj,
-          createdById: localAdmin2.id,
-        })
-        txs.push({
-          localId: local2.id,
-          type: 'CASH_OUT',
-          category: categories.CASH_OUT[day % 4],
-          amount: 400000 + Math.round(Math.random() * 1300000),
-          description: 'Pengeluaran',
-          date: dateObj,
-          createdById: localAdmin2.id,
-        })
-        txs.push({
-          localId: local2.id,
-          type: 'REVENUE',
-          category: categories.REVENUE[day % 3],
-          amount: 600000 + Math.round(Math.random() * 1000000),
-          description: 'Pendapatan',
-          date: dateObj,
-          createdById: localAdmin2.id,
-        })
-      }
-    }
-    await db.transaction.createMany({ data: txs })
-    console.log(`✅ Seeded ${txs.length} sample transactions`)
-  } else {
-    console.log('ℹ️  Super admin already exists, skipping seed.')
+  // 5. Create Local Admins (each logs in via QR token)
+  const la1Token = generateLoginToken()
+  const localAdmin1 = await db.user.create({
+    data: {
+      email: 'lokal.pusat@gereja.internal',
+      name: 'Admin Lokal Pusat',
+      passwordHash: await hashPassword('lokal123'),
+      role: 'LOCAL_ADMIN',
+      localId: local1.id,
+      regionId: regions[0].id,
+      createdById: regionalAdmin.id,
+      loginToken: la1Token,
+      tokenActive: true,
+      tokenCreatedAt: new Date(),
+    },
+  })
+  const la2Token = generateLoginToken()
+  const localAdmin2 = await db.user.create({
+    data: {
+      email: 'lokal.selatan@gereja.internal',
+      name: 'Admin Lokal Selatan',
+      passwordHash: await hashPassword('lokal123'),
+      role: 'LOCAL_ADMIN',
+      localId: local2.id,
+      regionId: regions[0].id,
+      createdById: regionalAdmin.id,
+      loginToken: la2Token,
+      tokenActive: true,
+      tokenCreatedAt: new Date(),
+    },
+  })
+  console.log(`✅ Local Admin: ${localAdmin1.name} / lokal123`)
+  console.log(`   🔑 Login link: /?token=${la1Token}`)
+  console.log(`✅ Local Admin: ${localAdmin2.name} / lokal123`)
+  console.log(`   🔑 Login link: /?token=${la2Token}`)
+
+  // 6. Seed sample transactions for the past 6 months
+  const categories = {
+    CASH_IN: ['Persembahan Minggu', 'Donasi Jemaat', 'Sumbangan Khusus'],
+    CASH_OUT: ['Gaji Pegawai', 'Biaya Operasional', 'Pemeliharaan Gedung', 'Listrik & Air'],
+    REVENUE: ['Pendapatan Kegiatan', 'Penjualan Buku Rohani', 'Sewa Ruangan'],
   }
+  const now = new Date()
+  const txs: any[] = []
+  for (let m = 5; m >= 0; m--) {
+    for (let day = 1; day <= 4; day++) {
+      const month = now.getMonth() - m
+      const dateObj = new Date(now.getFullYear(), month, day * 7)
+      txs.push({ localId: local1.id, type: 'CASH_IN', category: categories.CASH_IN[day % 3], amount: 1500000 + Math.round(Math.random() * 2000000), description: 'Persembahan ibadah minggu', date: dateObj, createdById: localAdmin1.id })
+      txs.push({ localId: local1.id, type: 'CASH_OUT', category: categories.CASH_OUT[day % 4], amount: 500000 + Math.round(Math.random() * 1500000), description: 'Pengeluaran rutin', date: dateObj, createdById: localAdmin1.id })
+      txs.push({ localId: local1.id, type: 'REVENUE', category: categories.REVENUE[day % 3], amount: 800000 + Math.round(Math.random() * 1200000), description: 'Pendapatan kegiatan', date: dateObj, createdById: localAdmin1.id })
+      txs.push({ localId: local2.id, type: 'CASH_IN', category: categories.CASH_IN[day % 3], amount: 1200000 + Math.round(Math.random() * 1800000), description: 'Persembahan ibadah', date: dateObj, createdById: localAdmin2.id })
+      txs.push({ localId: local2.id, type: 'CASH_OUT', category: categories.CASH_OUT[day % 4], amount: 400000 + Math.round(Math.random() * 1300000), description: 'Pengeluaran', date: dateObj, createdById: localAdmin2.id })
+      txs.push({ localId: local2.id, type: 'REVENUE', category: categories.REVENUE[day % 3], amount: 600000 + Math.round(Math.random() * 1000000), description: 'Pendapatan', date: dateObj, createdById: localAdmin2.id })
+    }
+  }
+  await db.transaction.createMany({ data: txs })
+  console.log(`✅ Seeded ${txs.length} sample transactions`)
 
   console.log('\n🎉 Seed complete!')
   console.log('═══════════════════════════════════════════')
   console.log('Login credentials:')
-  console.log('  Super Admin:    superadmin@gereja.id / superadmin123')
-  console.log('  Regional Admin: regional@gereja.id / regional123')
-  console.log('  Local Admin:    lokal.pusat@gereja.id / lokal123')
-  console.log('  Local Admin:    lokal.selatan@gereja.id / lokal123')
+  console.log('  Super Admin (email): superadmin@gereja.id / superadmin123')
+  console.log('  Regional & Local admins login via QR code link + password')
   console.log('═══════════════════════════════════════════')
 }
 

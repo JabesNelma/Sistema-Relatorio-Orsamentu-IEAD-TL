@@ -1,0 +1,658 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback } from 'react'
+     4→import { DashboardShell } from '@/components/shared/dashboard-shell'
+     5→import { StatCard } from '@/components/shared/stat-card'
+     6→import { Card } from '@/components/ui/card'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Input } from '@/components/ui/input'
+     9→import { Label } from '@/components/ui/label'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { Skeleton } from '@/components/ui/skeleton'
+    12→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    13→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    14→import {
+    15→  Area,
+    16→  AreaChart,
+    17→  Bar,
+    18→  BarChart,
+    19→  CartesianGrid,
+    20→  Cell,
+    21→  Legend,
+    22→  Pie,
+    23→  PieChart,
+    24→  ResponsiveContainer,
+    25→  Tooltip,
+    26→  XAxis,
+    27→  YAxis,
+    28→} from 'recharts'
+    29→import {
+    30→  ArrowDownCircle,
+    31→  ArrowUpCircle,
+    32→  Banknote,
+    33→  Building2,
+    34→  CheckCircle2,
+    35→  ChevronDown,
+    36→  ChevronUp,
+    37→  Loader2,
+    38→  MapPin,
+    39→  PieChart as PieIcon,
+    40→  Plus,
+    41→  Trash2,
+    42→  TrendingUp,
+    43→  UserCog,
+    44→  Wallet,
+    45→} from 'lucide-react'
+    46→import { toast } from 'sonner'
+    47→import { useAuthStore } from '@/lib/auth-store'
+    48→import { formatCompact, formatCurrency, formatDateShort, TRANSACTION_TYPE_LABELS } from '@/lib/format'
+    49→import { cn } from '@/lib/utils'
+    50→
+    51→type LocalAdmin = {
+    52→  id: string
+    53→  name: string
+    54→  email: string
+    55→  phone: string | null
+    56→  active: boolean
+    57→  local: { id: string; name: string } | null
+    58→  createdBy: string | null
+    59→}
+    60→
+    61→type Local = {
+    62→  id: string
+    63→  name: string
+    64→  address: string | null
+    65→  _count: { admins: number; transactions: number }
+    66→}
+    67→
+    68→type Report = {
+    69→  summary: { CASH_IN: number; CASH_OUT: number; REVENUE: number; net: number }
+    70→  perLocal: { id: string; name: string; region: string; CASH_IN: number; CASH_OUT: number; REVENUE: number }[]
+    71→  monthly: { label: string; key: string; CASH_IN: number; CASH_OUT: number; REVENUE: number }[]
+    72→  byCategory: { category: string; type: string; amount: number }[]
+    73→  locals: { id: string; name: string; region: string }[]
+    74→}
+    75→
+    76→type Transaction = {
+    77→  id: string
+    78→  type: 'CASH_IN' | 'CASH_OUT' | 'REVENUE'
+    79→  category: string
+    80→  amount: number
+    81→  description: string | null
+    82→  date: string
+    83→  local: { id: string; name: string }
+    84→  createdBy: { id: string; name: string }
+    85→}
+    86→
+    87→const PIE_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', '#9c6b3d', '#7a8c5a']
+    88→
+    89→export function RegionalAdminDashboard() {
+    90→  const user = useAuthStore((s) => s.user)!
+    91→  const [admins, setAdmins] = useState<LocalAdmin[]>([])
+    92→  const [locals, setLocals] = useState<Local[]>([])
+    93→  const [report, setReport] = useState<Report | null>(null)
+    94→  const [transactions, setTransactions] = useState<Transaction[]>([])
+    95→  const [loading, setLoading] = useState(true)
+    96→  const [submitting, setSubmitting] = useState(false)
+    97→  const [toggling, setToggling] = useState<string | null>(null)
+    98→  const [deleting, setDeleting] = useState<string | null>(null)
+    99→  const [localFilter, setLocalFilter] = useState<string>('all')
+   100→
+   101→  // form state
+   102→  const [name, setName] = useState('')
+   103→  const [email, setEmail] = useState('')
+   104→  const [phone, setPhone] = useState('')
+   105→  const [password, setPassword] = useState('')
+   106→  const [localMode, setLocalMode] = useState<'existing' | 'new'>('existing')
+   107→  const [localId, setLocalId] = useState('')
+   108→  const [localName, setLocalName] = useState('')
+   109→  const [localAddress, setLocalAddress] = useState('')
+   110→
+   111→  const fetchData = useCallback(async () => {
+   112→    setLoading(true)
+   113→    try {
+   114→      const [adminsRes, localsRes, reportRes, txRes] = await Promise.all([
+   115→        fetch('/api/admins', { cache: 'no-store' }),
+   116→        fetch('/api/locals', { cache: 'no-store' }),
+   117→        fetch('/api/reports', { cache: 'no-store' }),
+   118→        fetch('/api/transactions?limit=10', { cache: 'no-store' }),
+   119→      ])
+   120→      const [adminsData, localsData, reportData, txData] = await Promise.all([
+   121→        adminsRes.json(), localsRes.json(), reportRes.json(), txRes.json(),
+   122→      ])
+   123→      setAdmins(adminsData.users || [])
+   124→      setLocals(localsData.locals || [])
+   125→      setReport(reportData)
+   126→      setTransactions(txData.transactions || [])
+   127→    } catch {
+   128→      toast.error('Gagal memuat data')
+   129→    } finally {
+   130→      setLoading(false)
+   131→    }
+   132→  }, [])
+   133→
+   134→  useEffect(() => {
+   135→    fetchData()
+   136→  }, [fetchData])
+   137→
+   138→  // refetch transactions when filter changes
+   139→  useEffect(() => {
+   140→    async function fetchTx() {
+   141→      const url = localFilter === 'all' ? '/api/transactions?limit=10' : `/api/transactions?localId=${localFilter}&limit=10`
+   142→      const res = await fetch(url, { cache: 'no-store' })
+   143→      const data = await res.json()
+   144→      setTransactions(data.transactions || [])
+   145→    }
+   146→    if (!loading) fetchTx()
+   147→  }, [localFilter, loading])
+   148→
+   149→  async function handleSubmit(e: React.FormEvent) {
+   150→    e.preventDefault()
+   151→    if (!name || !email || !password) {
+   152→      toast.error('Nama, email, dan password wajib diisi')
+   153→      return
+   154→    }
+   155→    if (localMode === 'existing' && !localId) {
+   156→      toast.error('Pilih gereja lokal terlebih dahulu')
+   157→      return
+   158→    }
+   159→    if (localMode === 'new' && !localName) {
+   160→      toast.error('Masukkan nama gereja lokal baru')
+   161→      return
+   162→    }
+   163→    setSubmitting(true)
+   164→    try {
+   165→      const body: any = { name, email, password, phone }
+   166→      if (localMode === 'existing') body.localId = localId
+   167→      else { body.localName = localName; body.localAddress = localAddress }
+   168→      const res = await fetch('/api/admins', {
+   169→        method: 'POST',
+   170→        headers: { 'Content-Type': 'application/json' },
+   171→        body: JSON.stringify(body),
+   172→      })
+   173→      const data = await res.json()
+   174→      if (!res.ok) {
+   175→        toast.error(data.error || 'Gagal membuat admin')
+   176→        return
+   177→      }
+   178→      toast.success('Admin lokal berhasil dibuat')
+   179→      setName(''); setEmail(''); setPhone(''); setPassword('')
+   180→      setLocalName(''); setLocalAddress(''); setLocalId('')
+   181→      setLocalMode('existing')
+   182→      await fetchData()
+   183→    } catch {
+   184→      toast.error('Terjadi kesalahan')
+   185→    } finally {
+   186→      setSubmitting(false)
+   187→    }
+   188→  }
+   189→
+   190→  async function toggleActive(admin: LocalAdmin) {
+   191→    setToggling(admin.id)
+   192→    try {
+   193→      const res = await fetch(`/api/admins/${admin.id}`, {
+   194→        method: 'PATCH',
+   195→        headers: { 'Content-Type': 'application/json' },
+   196→        body: JSON.stringify({ active: !admin.active }),
+   197→      })
+   198→      if (!res.ok) {
+   199→        const data = await res.json()
+   200→        toast.error(data.error || 'Gagal mengubah status')
+   201→        return
+   202→      }
+   203→      setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, active: !a.active } : a))
+   204→      toast.success(admin.active ? 'Admin dinonaktifkan' : 'Admin diaktifkan')
+   205→    } catch {
+   206→      toast.error('Terjadi kesalahan')
+   207→    } finally {
+   208→      setToggling(null)
+   209→    }
+   210→  }
+   211→
+   212→  async function handleDelete(id: string) {
+   213→    if (!confirm('Hapus admin lokal ini secara permanen?')) return
+   214→    setDeleting(id)
+   215→    try {
+   216→      const res = await fetch(`/api/admins/${id}`, { method: 'DELETE' })
+   217→      if (!res.ok) {
+   218→        const data = await res.json()
+   219→        toast.error(data.error || 'Gagal menghapus')
+   220→        return
+   221→      }
+   222→      setAdmins((prev) => prev.filter((a) => a.id !== id))
+   223→      toast.success('Admin dihapus')
+   224→    } catch {
+   225→      toast.error('Terjadi kesalahan')
+   226→    } finally {
+   227→      setDeleting(null)
+   228→    }
+   229→  }
+   230→
+   231→  const summary = report?.summary ?? { CASH_IN: 0, CASH_OUT: 0, REVENUE: 0, net: 0 }
+   232→  const perLocal = report?.perLocal ?? []
+   233→  const monthly = report?.monthly ?? []
+   234→  const byCategory = (report?.byCategory ?? []).slice(0, 7)
+   235→
+   236→  return (
+   237→    <DashboardShell>
+   238→      <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+   239→        <div>
+   240→          <h1 className="font-serif text-2xl sm:text-3xl text-foreground">
+   241→            Panel <span className="text-gradient-gold">Admin Wilayah</span>
+   242→          </h1>
+   243→          <p className="text-sm text-foreground/60 mt-1">
+   244→            Wilayah: <span className="font-medium text-foreground/80">{user.region?.name}</span> ·
+   245→            {' '}Pantau laporan keuangan dari gereja lokal.
+   246→          </p>
+   247→        </div>
+   248→        <div className="flex items-center gap-2">
+   249→          <Select value={localFilter} onValueChange={setLocalFilter}>
+   250→            <SelectTrigger className="w-[200px] bg-card">
+   251→              <Building2 className="w-4 h-4 mr-1.5 text-muted-foreground" />
+   252→              <SelectValue />
+   253→            </SelectTrigger>
+   254→            <SelectContent>
+   255→              <SelectItem value="all">Semua Gereja Lokal</SelectItem>
+   256→              {locals.map((l) => (
+   257→                <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+   258→              ))}
+   259→            </SelectContent>
+   260→          </Select>
+   261→        </div>
+   262→      </div>
+   263→
+   264→      {/* Stats */}
+   265→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+   266→        <StatCard label="Uang Masuk" value={formatCurrency(summary.CASH_IN)} icon={ArrowDownCircle} tone="emerald" sublabel="Total penerimaan" />
+   267→        <StatCard label="Pendapatan" value={formatCurrency(summary.REVENUE)} icon={TrendingUp} tone="gold" sublabel="Pendapatan kegiatan" />
+   268→        <StatCard label="Uang Keluar" value={formatCurrency(summary.CASH_OUT)} icon={ArrowUpCircle} tone="rose" sublabel="Total pengeluaran" />
+   269→        <StatCard label="Saldo Bersih" value={formatCurrency(summary.net)} icon={Wallet} tone={summary.net >= 0 ? 'emerald' : 'rose'} sublabel={summary.net >= 0 ? 'Surplus' : 'Defisit'} trend={summary.net >= 0 ? 'up' : 'down'} />
+   270→      </div>
+   271→
+   272→      {/* Charts */}
+   273→      <div className="grid lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
+   274→        {/* Monthly trend - takes 2 cols */}
+   275→        <Card className="lg:col-span-2 p-5 sm:p-6 border-border/70">
+   276→          <div className="flex items-center gap-2 mb-4">
+   277→            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+   278→              <TrendingUp className="w-4 h-4 text-primary" />
+   279→            </div>
+   280→            <div>
+   281→              <h2 className="font-serif text-lg text-foreground">Tren Arus Kas 6 Bulan</h2>
+   282→              <p className="text-xs text-foreground/55">Perbandingan uang masuk, keluar, dan pendapatan</p>
+   283→            </div>
+   284→          </div>
+   285→          {loading ? (
+   286→            <Skeleton className="h-[260px] w-full rounded-lg" />
+   287→          ) : monthly.length === 0 ? (
+   288→            <div className="h-[260px] flex items-center justify-center text-sm text-foreground/50">Belum ada data</div>
+   289→          ) : (
+   290→            <ResponsiveContainer width="100%" height={260}>
+   291→              <AreaChart data={monthly} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+   292→                <defs>
+   293→                  <linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1">
+   294→                    <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.4} />
+   295→                    <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+   296→                  </linearGradient>
+   297→                  <linearGradient id="gOut" x1="0" y1="0" x2="0" y2="1">
+   298→                    <stop offset="5%" stopColor="var(--destructive)" stopOpacity={0.35} />
+   299→                    <stop offset="95%" stopColor="var(--destructive)" stopOpacity={0.02} />
+   300→                  </linearGradient>
+   301→                  <linearGradient id="gRev" x1="0" y1="0" x2="0" y2="1">
+   302→                    <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.35} />
+   303→                    <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0.02} />
+   304→                  </linearGradient>
+   305→                </defs>
+   306→                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+   307→                <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+   308→                <YAxis tickFormatter={(v) => formatCompact(v).replace('Rp ', '')} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={60} />
+   309→                <Tooltip
+   310→                  formatter={(v: number, n: string) => [formatCurrency(v), TRANSACTION_TYPE_LABELS[n] || n]}
+   311→                  contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12, boxShadow: '0 8px 24px -8px rgba(0,0,0,0.12)' }}
+   312→                />
+   313→                <Legend formatter={(v) => <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{TRANSACTION_TYPE_LABELS[v] || v}</span>} />
+   314→                <Area type="monotone" dataKey="CASH_IN" stroke="var(--chart-1)" strokeWidth={2} fill="url(#gIn)" />
+   315→                <Area type="monotone" dataKey="CASH_OUT" stroke="var(--destructive)" strokeWidth={2} fill="url(#gOut)" />
+   316→                <Area type="monotone" dataKey="REVENUE" stroke="var(--chart-2)" strokeWidth={2} fill="url(#gRev)" />
+   317→              </AreaChart>
+   318→            </ResponsiveContainer>
+   319→          )}
+   320→        </Card>
+   321→
+   322→        {/* Category pie */}
+   323→        <Card className="p-5 sm:p-6 border-border/70">
+   324→          <div className="flex items-center gap-2 mb-4">
+   325→            <div className="w-9 h-9 rounded-lg bg-gold/15 flex items-center justify-center">
+   326→              <PieIcon className="w-4 h-4 text-gold" />
+   327→            </div>
+   328→            <div>
+   329→              <h2 className="font-serif text-lg text-foreground">Per Kategori</h2>
+   330→              <p className="text-xs text-foreground/55">Distribusi pengeluaran terbesar</p>
+   331→            </div>
+   332→          </div>
+   333→          {loading ? (
+   334→            <Skeleton className="h-[260px] w-full rounded-lg" />
+   335→          ) : byCategory.length === 0 ? (
+   336→            <div className="h-[260px] flex items-center justify-center text-sm text-foreground/50">Belum ada data</div>
+   337→          ) : (
+   338→            <ResponsiveContainer width="100%" height={260}>
+   339→              <PieChart>
+   340→                <Pie
+   341→                  data={byCategory}
+   342→                  dataKey="amount"
+   343→                  nameKey="category"
+   344→                  cx="50%"
+   345→                  cy="45%"
+   346→                  innerRadius={45}
+   347→                  outerRadius={80}
+   348→                  paddingAngle={2}
+   349→                >
+   350→                  {byCategory.map((_, i) => (
+   351→                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+   352→                  ))}
+   353→                </Pie>
+   354→                <Tooltip
+   355→                  formatter={(v: number) => formatCurrency(v)}
+   356→                  contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12 }}
+   357→                />
+   358→                <Legend
+   359→                  formatter={(v) => <span style={{ fontSize: 10.5, color: 'var(--foreground)' }} className="truncate">{v}</span>}
+   360→                  layout="horizontal"
+   361→                  align="center"
+   362→                  verticalAlign="bottom"
+   363→                />
+   364→              </PieChart>
+   365→            </ResponsiveContainer>
+   366→          )}
+   367→        </Card>
+   368→      </div>
+   369→
+   370→      {/* Per local bar chart */}
+   371→      <Card className="p-5 sm:p-6 border-border/70 mb-6">
+   372→        <div className="flex items-center gap-2 mb-4">
+   373→          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+   374→            <Building2 className="w-4 h-4 text-primary" />
+   375→          </div>
+   376→          <div>
+   377→            <h2 className="font-serif text-lg text-foreground">Perbandingan per Gereja Lokal</h2>
+   378→            <p className="text-xs text-foreground/55">Total uang masuk, keluar, dan pendapatan tiap lokal</p>
+   379→          </div>
+   380→        </div>
+   381→        {loading ? (
+   382→          <Skeleton className="h-[260px] w-full rounded-lg" />
+   383→        ) : perLocal.length === 0 ? (
+   384→          <div className="h-[260px] flex items-center justify-center text-sm text-foreground/50">Belum ada data</div>
+   385→        ) : (
+   386→          <ResponsiveContainer width="100%" height={280}>
+   387→            <BarChart data={perLocal} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+   388→              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+   389→              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} interval={0} />
+   390→              <YAxis tickFormatter={(v) => formatCompact(v).replace('Rp ', '')} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={60} />
+   391→              <Tooltip
+   392→                formatter={(v: number, n: string) => [formatCurrency(v), TRANSACTION_TYPE_LABELS[n] || n]}
+   393→                contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12 }}
+   394→              />
+   395→              <Legend formatter={(v) => <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{TRANSACTION_TYPE_LABELS[v] || v}</span>} />
+   396→              <Bar dataKey="CASH_IN" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+   397→              <Bar dataKey="CASH_OUT" fill="var(--destructive)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+   398→              <Bar dataKey="REVENUE" fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+   399→            </BarChart>
+   400→          </ResponsiveContainer>
+   401→        )}
+   402→      </Card>
+   403→
+   404→      <div className="grid lg:grid-cols-5 gap-6">
+   405→        {/* Create form */}
+   406→        <Card className="lg:col-span-2 p-5 sm:p-6 border-border/70 h-fit">
+   407→          <div className="flex items-center gap-2 mb-5">
+   408→            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+   409→              <UserCog className="w-4 h-4 text-primary" />
+   410→            </div>
+   411→            <div>
+   412→              <h2 className="font-serif text-lg text-foreground">Buat Admin Lokal</h2>
+   413→              <p className="text-xs text-foreground/55">Admin wilayah membuat admin gereja lokal</p>
+   414→            </div>
+   415→          </div>
+   416→
+   417→          <form onSubmit={handleSubmit} className="space-y-4">
+   418→            <div className="space-y-1.5">
+   419→              <Label htmlFor="ra-name" className="text-foreground/80">Nama Lengkap</Label>
+   420→              <Input id="ra-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama admin lokal" />
+   421→            </div>
+   422→            <div className="space-y-1.5">
+   423→              <Label htmlFor="ra-email" className="text-foreground/80">Email</Label>
+   424→              <Input id="ra-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@gereja.id" />
+   425→            </div>
+   426→            <div className="grid grid-cols-2 gap-3">
+   427→              <div className="space-y-1.5">
+   428→                <Label htmlFor="ra-phone" className="text-foreground/80">Telepon <span className="text-muted-foreground text-xs">(opsional)</span></Label>
+   429→                <Input id="ra-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+62..." />
+   430→              </div>
+   431→              <div className="space-y-1.5">
+   432→                <Label htmlFor="ra-pass" className="text-foreground/80">Password</Label>
+   433→                <Input id="ra-pass" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 6 karakter" />
+   434→              </div>
+   435→            </div>
+   436→
+   437→            <div className="space-y-2">
+   438→              <Label className="text-foreground/80">Gereja Lokal</Label>
+   439→              <div className="grid grid-cols-2 gap-2">
+   440→                <button
+   441→                  type="button"
+   442→                  onClick={() => setLocalMode('existing')}
+   443→                  className={cn(
+   444→                    'flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-sm transition-all',
+   445→                    localMode === 'existing' ? 'border-gold/50 bg-accent/60 text-foreground' : 'border-border bg-muted/40 text-foreground/65 hover:bg-accent/40'
+   446→                  )}
+   447→                >
+   448→                  <CheckCircle2 className="w-4 h-4" /> Pilih
+   449→                </button>
+   450→                <button
+   451→                  type="button"
+   452→                  onClick={() => setLocalMode('new')}
+   453→                  className={cn(
+   454→                    'flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-sm transition-all',
+   455→                    localMode === 'new' ? 'border-gold/50 bg-accent/60 text-foreground' : 'border-border bg-muted/40 text-foreground/65 hover:bg-accent/40'
+   456→                  )}
+   457→                >
+   458→                  <Plus className="w-4 h-4" /> Buat Baru
+   459→                </button>
+   460→              </div>
+   461→              {localMode === 'existing' ? (
+   462→                <Select value={localId} onValueChange={setLocalId}>
+   463→                  <SelectTrigger className="w-full">
+   464→                    <SelectValue placeholder="Pilih gereja lokal" />
+   465→                  </SelectTrigger>
+   466→                  <SelectContent>
+   467→                    {locals.map((l) => (
+   468→                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+   469→                    ))}
+   470→                  </SelectContent>
+   471→                </Select>
+   472→              ) : (
+   473→                <div className="space-y-2">
+   474→                  <Input value={localName} onChange={(e) => setLocalName(e.target.value)} placeholder="Nama gereja lokal baru" />
+   475→                  <Input value={localAddress} onChange={(e) => setLocalAddress(e.target.value)} placeholder="Alamat (opsional)" />
+   476→                </div>
+   477→              )}
+   478→            </div>
+   479→
+   480→            <Button type="submit" disabled={submitting} className="w-full h-11 bg-primary text-cream hover:bg-primary/90">
+   481→              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+   482→              Buat Admin Lokal
+   483→            </Button>
+   484→          </form>
+   485→        </Card>
+   486→
+   487→        {/* Tabs: admins + locals + recent tx */}
+   488→        <div className="lg:col-span-3">
+   489→          <Tabs defaultValue="admins">
+   490→            <TabsList className="grid grid-cols-3 w-full mb-4 bg-muted/60">
+   491→              <TabsTrigger value="admins" className="data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs sm:text-sm">
+   492→                <UserCog className="w-4 h-4 mr-1.5" /> Admin Lokal
+   493→              </TabsTrigger>
+   494→              <TabsTrigger value="locals" className="data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs sm:text-sm">
+   495→                <Building2 className="w-4 h-4 mr-1.5" /> Gereja
+   496→              </TabsTrigger>
+   497→              <TabsTrigger value="recent" className="data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs sm:text-sm">
+   498→                <Banknote className="w-4 h-4 mr-1.5" /> Transaksi
+   499→              </TabsTrigger>
+   500→            </TabsList>
+   501→
+   502→            <TabsContent value="admins">
+   503→              <Card className="p-4 sm:p-5 border-border/70">
+   504→                {loading ? (
+   505→                  <div className="space-y-3">
+   506→                    {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
+   507→                  </div>
+   508→                ) : admins.length === 0 ? (
+   509→                  <div className="text-center py-10">
+   510→                    <UserCog className="w-10 h-10 text-muted-foreground/50 mx-auto mb-2" />
+   511→                    <p className="text-sm text-foreground/60">Belum ada admin lokal</p>
+   512→                  </div>
+   513→                ) : (
+   514→                  <div className="space-y-2.5 max-h-[460px] overflow-y-auto scrollbar-elegant pr-1 -mr-1">
+   515→                    {admins.map((a) => (
+   516→                      <div key={a.id} className="group p-3.5 rounded-xl border border-border/70 bg-card hover:border-gold/30 hover:shadow-elegant transition-all">
+   517→                        <div className="flex items-start gap-3">
+   518→                          <div className={cn(
+   519→                            'w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-serif text-sm font-semibold',
+   520→                            a.active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+   521→                          )}>
+   522→                            {a.name.charAt(0).toUpperCase()}
+   523→                          </div>
+   524→                          <div className="flex-1 min-w-0">
+   525→                            <div className="flex items-center gap-2 flex-wrap">
+   526→                              <span className="font-medium text-foreground text-sm truncate">{a.name}</span>
+   527→                              <Badge variant={a.active ? 'default' : 'secondary'} className={cn('text-[10px] h-5', a.active ? 'bg-primary/10 text-primary border-primary/20' : '')}>
+   528→                                {a.active ? 'Aktif' : 'Nonaktif'}
+   529→                              </Badge>
+   530→                            </div>
+   531→                            <p className="text-xs text-foreground/55 mt-0.5 truncate">{a.email}</p>
+   532→                            <p className="text-[11px] text-foreground/50 mt-0.5 flex items-center gap-1">
+   533→                              <MapPin className="w-3 h-3" /> {a.local?.name || '—'}
+   534→                            </p>
+   535→                          </div>
+   536→                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+   537→                            <button
+   538→                              onClick={() => toggleActive(a)}
+   539→                              disabled={toggling === a.id}
+   540→                              className={cn(
+   541→                                'w-8 h-8 rounded-md flex items-center justify-center transition-colors',
+   542→                                a.active ? 'text-muted-foreground hover:text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+   543→                              )}
+   544→                            >
+   545→                              {toggling === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : a.active ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+   546→                            </button>
+   547→                            <button
+   548→                              onClick={() => handleDelete(a.id)}
+   549→                              disabled={deleting === a.id}
+   550→                              className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+   551→                            >
+   552→                              {deleting === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+   553→                            </button>
+   554→                          </div>
+   555→                        </div>
+   556→                      </div>
+   557→                    ))}
+   558→                  </div>
+   559→                )}
+   560→              </Card>
+   561→            </TabsContent>
+   562→
+   563→            <TabsContent value="locals">
+   564→              <Card className="p-4 sm:p-5 border-border/70">
+   565→                {loading ? (
+   566→                  <div className="space-y-3">
+   567→                    {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
+   568→                  </div>
+   569→                ) : locals.length === 0 ? (
+   570→                  <div className="text-center py-10">
+   571→                    <Building2 className="w-10 h-10 text-muted-foreground/50 mx-auto mb-2" />
+   572→                    <p className="text-sm text-foreground/60">Belum ada gereja lokal</p>
+   573→                  </div>
+   574→                ) : (
+   575→                  <div className="grid sm:grid-cols-2 gap-3">
+   576→                    {locals.map((l) => {
+   577→                      const pl = perLocal.find((p) => p.id === l.id)
+   578→                      const net = pl ? pl.CASH_IN + pl.REVENUE - pl.CASH_OUT : 0
+   579→                      return (
+   580→                        <div key={l.id} className="p-4 rounded-xl border border-border/70 bg-card hover:border-gold/30 transition-colors">
+   581→                          <div className="flex items-start gap-2.5">
+   582→                            <div className="w-10 h-10 rounded-lg bg-gold/15 flex items-center justify-center shrink-0">
+   583→                              <Building2 className="w-5 h-5 text-gold" />
+   584→                            </div>
+   585→                            <div className="min-w-0 flex-1">
+   586→                              <p className="font-medium text-foreground text-sm truncate">{l.name}</p>
+   587→                              {l.address && <p className="text-[11px] text-foreground/55 mt-0.5 truncate">{l.address}</p>}
+   588→                              <div className="flex items-center gap-2 mt-2">
+   589→                                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/15 text-[10px] h-5">
+   590→                                  {l._count.admins} admin
+   591→                                </Badge>
+   592→                                <Badge variant="outline" className="bg-muted text-foreground/60 border-border text-[10px] h-5">
+   593→                                  {l._count.transactions} transaksi
+   594→                                </Badge>
+   595→                              </div>
+   596→                              {pl && (
+   597→                                <p className={cn('text-xs font-medium mt-2', net >= 0 ? 'text-primary' : 'text-destructive')}>
+   598→                                  Saldo: {formatCurrency(net)}
+   599→                                </p>
+   600→                              )}
+   601→                            </div>
+   602→                          </div>
+   603→                        </div>
+   604→                      )
+   605→                    })}
+   606→                  </div>
+   607→                )}
+   608→              </Card>
+   609→            </TabsContent>
+   610→
+   611→            <TabsContent value="recent">
+   612→              <Card className="p-4 sm:p-5 border-border/70">
+   613→                {loading ? (
+   614→                  <div className="space-y-3">
+   615→                    {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
+   616→                  </div>
+   617→                ) : transactions.length === 0 ? (
+   618→                  <div className="text-center py-10">
+   619→                    <Banknote className="w-10 h-10 text-muted-foreground/50 mx-auto mb-2" />
+   620→                    <p className="text-sm text-foreground/60">Belum ada transaksi</p>
+   621→                  </div>
+   622→                ) : (
+   623→                  <div className="space-y-2 max-h-[460px] overflow-y-auto scrollbar-elegant pr-1 -mr-1">
+   624→                    {transactions.map((t) => (
+   625→                      <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-card hover:border-gold/30 transition-colors">
+   626→                        <div className={cn(
+   627→                          'w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
+   628→                          t.type === 'CASH_IN' ? 'bg-primary/10' : t.type === 'CASH_OUT' ? 'bg-destructive/10' : 'bg-gold/15'
+   629→                        )}>
+   630→                          {t.type === 'CASH_IN' && <ArrowDownCircle className="w-4 h-4 text-primary" />}
+   631→                          {t.type === 'CASH_OUT' && <ArrowUpCircle className="w-4 h-4 text-destructive" />}
+   632→                          {t.type === 'REVENUE' && <TrendingUp className="w-4 h-4 text-gold" />}
+   633→                        </div>
+   634→                        <div className="flex-1 min-w-0">
+   635→                          <p className="text-sm font-medium text-foreground truncate">{t.category}</p>
+   636→                          <p className="text-[11px] text-foreground/55 truncate">
+   637→                            {t.local.name} · {formatDateShort(t.date)} · oleh {t.createdBy.name}
+   638→                          </p>
+   639→                        </div>
+   640→                        <p className={cn(
+   641→                          'font-serif text-sm font-semibold shrink-0',
+   642→                          t.type === 'CASH_OUT' ? 'text-destructive' : 'text-primary'
+   643→                        )}>
+   644→                          {t.type === 'CASH_OUT' ? '-' : '+'}{formatCurrency(t.amount)}
+   645→                        </p>
+   646→                      </div>
+   647→                    ))}
+   648→                  </div>
+   649→                )}
+   650→              </Card>
+   651→            </TabsContent>
+   652→          </Tabs>
+   653→        </div>
+   654→      </div>
+   655→    </DashboardShell>
+   656→  )
+   657→}
+   658→

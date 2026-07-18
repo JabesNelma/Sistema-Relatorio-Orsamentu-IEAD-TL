@@ -13,6 +13,9 @@ export type SafeUser = {
   active: boolean
   regionId: string | null
   localId: string | null
+  loginToken: string | null
+  tokenActive: boolean
+  tokenCreatedAt: string | null
   region?: { id: string; name: string } | null
   local?: { id: string; name: string } | null
 }

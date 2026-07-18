@@ -27,6 +27,9 @@ export type SafeUser = {
   active: boolean
   regionId: string | null
   localId: string | null
+  loginToken: string | null
+  tokenActive: boolean
+  tokenCreatedAt: string | null
   region?: { id: string; name: string } | null
   local?: { id: string; name: string } | null
 }
@@ -41,9 +44,17 @@ export function toSafeUser(user: any): SafeUser {
     active: user.active,
     regionId: user.regionId,
     localId: user.localId,
+    loginToken: user.loginToken ?? null,
+    tokenActive: user.tokenActive ?? true,
+    tokenCreatedAt: user.tokenCreatedAt ? user.tokenCreatedAt.toISOString() : null,
     region: user.region ? { id: user.region.id, name: user.region.name } : null,
     local: user.local ? { id: user.local.id, name: user.local.name } : null,
   }
+}
+
+// Generate a long, unguessable secret token for QR-code login links.
+export function generateLoginToken(): string {
+  return randomBytes(24).toString('hex')
 }
 
 export async function createSession(userId: string): Promise<string> {

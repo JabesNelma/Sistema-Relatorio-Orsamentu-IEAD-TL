@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, generateLoginToken, toSafeUser } from '@/lib/auth'
 
-// PATCH /api/admins/[id] -> toggle active
+// PATCH /api/admins/[id]
+// Body can include: { active?, tokenActive? }
+// - active: enable/disable the whole admin account
+// - tokenActive: enable/disable the QR-code login link (so a lost QR can be revoked)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
   const body = await req.json()
-  const { active } = body
+  const { active, tokenActive } = body
 
   const target = await db.user.findUnique({ where: { id } })
   if (!target) return NextResponse.json({ error: 'Admin tidak ditemukan' }, { status: 404 })
@@ -26,13 +29,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
   }
 
+  const data: any = {}
+  if (typeof active === 'boolean') data.active = active
+  if (typeof tokenActive === 'boolean') data.tokenActive = tokenActive
+
   const updated = await db.user.update({
     where: { id },
-    data: { active: typeof active === 'boolean' ? active : target.active },
+    data,
+    include: {
+      region: { select: { id: true, name: true } },
+      local: { select: { id: true, name: true } },
+    },
   })
-  return NextResponse.json({ user: { id: updated.id, active: updated.active } })
+  return NextResponse.json({ user: toSafeUser(updated) })
 }
 
+// DELETE /api/admins/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

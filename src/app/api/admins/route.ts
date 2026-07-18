@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser, hashPassword, toSafeUser } from '@/lib/auth'
+import { getCurrentUser, hashPassword, toSafeUser, generateLoginToken } from '@/lib/auth'
+import { randomBytes } from 'crypto'
 
 // GET: list admins visible to current user
 // - SUPER_ADMIN: all regional admins
@@ -39,67 +40,85 @@ export async function GET() {
   })
 }
 
+// Build a unique internal email (regional/local admins never use email to log in).
+function makeInternalEmail(prefix: string): string {
+  return `${prefix}-${randomBytes(5).toString('hex')}@gereja.internal`
+}
+
 // POST: create an admin
-// - SUPER_ADMIN -> creates REGIONAL_ADMIN (must specify regionId; auto-creates region if name provided without regionId)
-// - REGIONAL_ADMIN -> creates LOCAL_ADMIN (must specify localId in their region)
+// - SUPER_ADMIN -> creates REGIONAL_ADMIN
+//   body: { name, wilayah: 1|2|3|4, password }
+//   Generates a secret login token (for QR code login link).
+// - REGIONAL_ADMIN -> creates LOCAL_ADMIN
+//   body: { name, localId?, localName?, localAddress?, password }
+//   Generates a secret login token (for QR code login link).
 export async function POST(req: NextRequest) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { name, email, password, phone, regionId, regionName, regionDescription, localId, localName, localAddress } = body
+  const { name, password, wilayah, localId, localName, localAddress } = body
 
-  if (!name || !email || !password) {
-    return NextResponse.json({ error: 'Nama, email, dan password wajib diisi' }, { status: 400 })
+  if (!name || !password) {
+    return NextResponse.json({ error: 'Nama lengkap dan password wajib diisi' }, { status: 400 })
   }
   if (password.length < 6) {
     return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 })
   }
 
-  const normalizedEmail = email.toLowerCase().trim()
-  const existing = await db.user.findUnique({ where: { email: normalizedEmail } })
-  if (existing) {
-    return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 400 })
-  }
-
   if (me.role === 'SUPER_ADMIN') {
-    // Create REGIONAL_ADMIN. Need a region: either existing regionId or create new region from regionName.
-    let finalRegionId = regionId as string | undefined
+    // Wilayah must be one of 1..4
+    const n = Number(wilayah)
+    if (![1, 2, 3, 4].includes(n)) {
+      return NextResponse.json({ error: 'Wilayah harus 1, 2, 3, atau 4' }, { status: 400 })
+    }
 
-    if (!finalRegionId && regionName) {
-      const region = await db.region.create({
+    // Find-or-create the region named "Wilayah N"
+    const regionName = `Wilayah ${n}`
+    let region = await db.region.findFirst({ where: { name: regionName } })
+    if (!region) {
+      region = await db.region.create({
         data: {
           name: regionName,
-          description: regionDescription ?? null,
-          address: null,
+          description: `Wilayah gereja ${regionName}`,
           createdById: me.id,
         },
       })
-      finalRegionId = region.id
-    }
-    if (!finalRegionId) {
-      return NextResponse.json({ error: 'Wilayah (region) wajib dipilih atau dibuat' }, { status: 400 })
     }
 
+    // Auto-generate a unique internal email (not used for login)
+    let email = makeInternalEmail(`wilayah${n}`)
+    while (await db.user.findUnique({ where: { email } })) {
+      email = makeInternalEmail(`wilayah${n}`)
+    }
+
+    const loginToken = generateLoginToken()
     const user = await db.user.create({
       data: {
         name,
-        email: normalizedEmail,
+        email,
         passwordHash: await hashPassword(password),
         role: 'REGIONAL_ADMIN',
-        phone: phone ?? null,
-        regionId: finalRegionId,
+        regionId: region.id,
         createdById: me.id,
+        loginToken,
+        tokenActive: true,
+        tokenCreatedAt: new Date(),
       },
       include: {
         region: { select: { id: true, name: true } },
       },
     })
-    return NextResponse.json({ user: toSafeUser(user) })
+
+    return NextResponse.json({
+      user: toSafeUser(user),
+      loginToken,
+      loginUrl: `/?token=${loginToken}`,
+    })
   }
 
   if (me.role === 'REGIONAL_ADMIN') {
-    // Create LOCAL_ADMIN scoped to the regional admin's region.
+    // Resolve the local church: existing localId (in this region) or create new.
     let finalLocalId = localId as string | undefined
 
     if (!finalLocalId && localName) {
@@ -117,28 +136,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Gereja lokal wajib dipilih atau dibuat' }, { status: 400 })
     }
 
-    // Ensure the local belongs to this regional admin's region
     const local = await db.local.findUnique({ where: { id: finalLocalId } })
     if (!local || local.regionId !== me.regionId) {
       return NextResponse.json({ error: 'Gereja lokal tidak valid' }, { status: 400 })
     }
 
+    let email = makeInternalEmail('lokal')
+    while (await db.user.findUnique({ where: { email } })) {
+      email = makeInternalEmail('lokal')
+    }
+
+    const loginToken = generateLoginToken()
     const user = await db.user.create({
       data: {
         name,
-        email: normalizedEmail,
+        email,
         passwordHash: await hashPassword(password),
         role: 'LOCAL_ADMIN',
-        phone: phone ?? null,
         regionId: me.regionId,
         localId: finalLocalId,
         createdById: me.id,
+        loginToken,
+        tokenActive: true,
+        tokenCreatedAt: new Date(),
       },
       include: {
         local: { select: { id: true, name: true } },
       },
     })
-    return NextResponse.json({ user: toSafeUser(user) })
+
+    return NextResponse.json({
+      user: toSafeUser(user),
+      loginToken,
+      loginUrl: `/?token=${loginToken}`,
+    })
   }
 
   return NextResponse.json({ error: 'Anda tidak memiliki izin untuk membuat admin' }, { status: 403 })

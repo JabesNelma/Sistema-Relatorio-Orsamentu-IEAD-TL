@@ -1,21 +1,33 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 import { PublicHome } from '@/components/public/public-home'
 import { SuperAdminDashboard } from '@/components/dashboards/super-admin-dashboard'
 import { RegionalAdminDashboard } from '@/components/dashboards/regional-admin-dashboard'
 import { LocalAdminDashboard } from '@/components/dashboards/local-admin-dashboard'
+import { QrLoginScreen } from '@/components/auth/qr-login-screen'
 import { Church, Loader2 } from 'lucide-react'
 
-export default function Home() {
+function HomeContent() {
   const user = useAuthStore((s) => s.user)
   const loading = useAuthStore((s) => s.loading)
   const fetchUser = useAuthStore((s) => s.fetchUser)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const token = searchParams.get('token')
 
   useEffect(() => {
     fetchUser()
   }, [fetchUser])
+
+  // If a QR login token is present in the URL and the visitor is not yet logged
+  // in, show the dedicated QR login screen (regional/local admins).
+  if (token && !user && !loading) {
+    return <QrLoginScreen token={token} onBack={() => router.push('/')} />
+  }
 
   if (loading) {
     return (
@@ -43,4 +55,26 @@ export default function Home() {
   if (user.role === 'LOCAL_ADMIN') return <LocalAdminDashboard />
 
   return <PublicHome />
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex flex-col items-center justify-center bg-cream gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full bg-emerald-deep flex items-center justify-center">
+              <Church className="w-7 h-7 text-gold" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-foreground/60">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Memuat portal...</span>
+          </div>
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
+  )
 }

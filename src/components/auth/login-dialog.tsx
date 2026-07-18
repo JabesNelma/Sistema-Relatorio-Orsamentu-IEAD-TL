@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Church, Eye, EyeOff, KeyRound, Loader2, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, Loader2, Lock, Mail, QrCode, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/auth-store'
 
@@ -17,8 +17,6 @@ type Props = {
 
 const demoAccounts = [
   { role: 'Super Admin', email: 'superadmin@gereja.id', password: 'superadmin123', desc: 'Mengelola admin wilayah', icon: ShieldCheck },
-  { role: 'Admin Wilayah', email: 'regional@gereja.id', password: 'regional123', desc: 'Mengelola admin lokal & lihat laporan', icon: Sparkles },
-  { role: 'Admin Lokal', email: 'lokal.pusat@gereja.id', password: 'lokal123', desc: 'Input arus kas & pendapatan', icon: Church },
 ]
 
 export function LoginDialog({ open, onOpenChange }: Props) {
@@ -77,9 +75,9 @@ export function LoginDialog({ open, onOpenChange }: Props) {
                 <KeyRound className="w-5 h-5 text-gold" />
               </div>
               <div>
-                <DialogTitle className="font-serif text-2xl text-cream tracking-wide">Masuk ke Sistem</DialogTitle>
+                <DialogTitle className="font-serif text-2xl text-cream tracking-wide">Masuk Super Admin</DialogTitle>
                 <DialogDescription className="text-cream/70 text-xs">
-                  Portal Laporan Keuangan Gereja
+                  Portal pusat laporan keuangan gereja
                 </DialogDescription>
               </div>
             </div>
@@ -169,6 +167,13 @@ export function LoginDialog({ open, onOpenChange }: Props) {
                 </span>
               </button>
             ))}
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg border border-gold/25 bg-gold/5 p-3 text-[11px] text-foreground/70">
+            <QrCode className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+            <span>
+              <b className="text-foreground/85">Admin Wilayah & Lokal</b> tidak login di sini. Mereka memindai QR code rahasia yang diberikan oleh super admin/admin wilayah, lalu memasukkan password.
+            </span>
           </div>
         </form>
       </DialogContent>
