@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { apiFetch, setSessionToken } from './api-fetch'
 
 export type Role = 'SUPER_ADMIN' | 'REGIONAL_ADMIN' | 'LOCAL_ADMIN'
 
@@ -36,7 +37,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (loading) => set({ loading }),
   fetchUser: async () => {
     try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'same-origin' })
+      const res = await apiFetch('/api/auth/me', { cache: 'no-store' })
       const data = await res.json()
       set({ user: data.user ?? null, loading: false })
     } catch {
@@ -44,7 +45,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
   logout: async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // ignore
+    }
+    setSessionToken(null)
     set({ user: null })
   },
 }))

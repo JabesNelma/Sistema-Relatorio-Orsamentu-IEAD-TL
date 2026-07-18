@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/auth-store'
+import { setSessionToken } from '@/lib/api-fetch'
 import { ROLE_LABELS } from '@/lib/format'
 
 type Props = {
@@ -79,8 +80,10 @@ export function QrLoginScreen({ token, onBack }: Props) {
         toast.error(data.error || 'Gagal masuk')
         return
       }
-      // Trust the login response. Dashboard fetches use apiFetch() which
-      // transparently retries on 401 while the browser commits the cookie.
+      // Trust the login response. Store the session token in localStorage so
+      // it can be sent as an Authorization: Bearer header (works in cross-site
+      // iframes where SameSite=Lax cookies are blocked).
+      setSessionToken(data.sessionToken)
       setUser(data.user)
       toast.success(`Selamat datang, ${data.user.name}!`)
     } catch {

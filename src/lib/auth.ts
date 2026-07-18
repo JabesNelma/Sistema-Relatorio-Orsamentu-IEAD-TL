@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { db } from './db'
 import { randomBytes } from 'crypto'
 
@@ -83,10 +83,38 @@ export async function clearSessionCookie() {
   cookieStore.delete(SESSION_COOKIE)
 }
 
-export async function getCurrentUser(): Promise<SafeUser | null> {
+// Resolves the current session token from EITHER the session cookie OR the
+// Authorization: Bearer <token> header. The header fallback is essential
+// when the app is embedded in a cross-site iframe (e.g. a preview panel):
+// browsers refuse to send SameSite=Lax cookies inside cross-site iframes,
+// so the cookie alone cannot authenticate requests in that context. The
+// client stores the same session token in localStorage and sends it as a
+// Bearer token, which works in every context.
+async function resolveSessionToken(): Promise<string | null> {
   try {
     const cookieStore = await cookies()
-    const token = cookieStore.get(SESSION_COOKIE)?.value
+    const cookieToken = cookieStore.get(SESSION_COOKIE)?.value
+    if (cookieToken) return cookieToken
+  } catch {
+    // cookies() may throw in some contexts; fall through to header.
+  }
+
+  try {
+    const headerStore = await headers()
+    const auth = headerStore.get('authorization') || headerStore.get('Authorization')
+    if (auth && auth.toLowerCase().startsWith('bearer ')) {
+      return auth.slice(7).trim()
+    }
+  } catch {
+    // headers() may throw in some contexts.
+  }
+
+  return null
+}
+
+export async function getCurrentUser(): Promise<SafeUser | null> {
+  try {
+    const token = await resolveSessionToken()
     if (!token) return null
 
     const session = await db.session.findUnique({

@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
       const sessionToken = await createSession(user.id)
       await setSessionCookie(sessionToken)
 
-      return NextResponse.json({ user: toSafeUser(user) })
+      // Return the session token in the body too. When the app runs inside a
+      // cross-site iframe (preview panel), the browser blocks SameSite=Lax
+      // cookies, so the client stores this token in localStorage and sends it
+      // as an Authorization: Bearer header on subsequent requests.
+      return NextResponse.json({ user: toSafeUser(user), sessionToken })
     }
 
     // --- Email-based login (super admin only) ---
@@ -99,7 +103,8 @@ export async function POST(req: NextRequest) {
     const sessionToken = await createSession(user.id)
     await setSessionCookie(sessionToken)
 
-    return NextResponse.json({ user: toSafeUser(user) })
+    // Return the session token in the body too (see note above about iframes).
+    return NextResponse.json({ user: toSafeUser(user), sessionToken })
   } catch (e) {
     console.error('Login error:', e)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })

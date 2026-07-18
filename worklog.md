@@ -130,3 +130,30 @@ Stage Summary:
 - The login API now proactively destroys stale sessions + clears stale cookies before setting the fresh one, so old cookies (from DB resets or previous logins) can no longer shadow the new cookie.
 - All dashboard data fetches use apiFetch() which transparently retries on 401, making the race condition invisible to the user.
 - Both super-admin email login and QR-code token login work end-to-end.
+
+---
+Task ID: QR-5
+Agent: main-orchestrator
+Task: Fix persistent "unauthorized" when creating admin (root cause: cross-site iframe blocks cookies in Preview Panel)
+
+Work Log:
+- Re-examined dev.log: after `POST /api/auth/login 200`, ALL subsequent requests returned 401 — including ALL apiFetch retries (300ms, 600ms, 1200ms). This proved it was NOT a race condition; the browser was simply never sending the session cookie.
+- Verified with curl: login API sets the cookie correctly (single Set-Cookie header, valid token), and using that cookie with curl returns 200 on /api/admins. So the server + cookie were correct.
+- Root cause identified: The user accesses the app via the **Preview Panel**, which embeds the app in a **cross-site iframe**. Modern browsers (Chrome 80+, Firefox, Safari) block `SameSite=Lax` cookies inside cross-site iframes for security. So the server set the cookie via Set-Cookie, but the browser refused to store/send it on subsequent requests inside the iframe. Every authenticated request returned 401.
+- Why my earlier agent-browser tests passed: agent-browser navigates directly to localhost:3000 as a top-level document (same-origin), where SameSite=Lax works fine. The user's Preview Panel is a cross-site iframe, where it does not.
+- Solution: Added a **Bearer token authentication layer** that works in ALL contexts (iframe, cross-origin, HTTP, HTTPS), alongside the existing cookie as a fallback.
+  1. `src/lib/auth.ts` — `getCurrentUser()` now resolves the session token from EITHER the `gereja_session` cookie OR the `Authorization: Bearer <token>` header (via `resolveSessionToken()`). The server treats both as equivalent — same session lookup in the DB.
+  2. `src/app/api/auth/login/route.ts` — login now returns `sessionToken` in the JSON response body (in addition to setting the cookie). This lets the client store it in localStorage.
+  3. `src/lib/api-fetch.ts` — `apiFetch()` reads the token from localStorage and attaches it as `Authorization: Bearer <token>` on every request. Still retries on 401 for the cookie race condition (same-origin contexts). Added `getSessionToken()` / `setSessionToken()` helpers backed by localStorage.
+  4. `src/lib/auth-store.ts` — `fetchUser` and `logout` now use `apiFetch` (so the Bearer header is attached). `logout` clears the localStorage token.
+  5. `src/components/auth/login-dialog.tsx` — after successful login, calls `setSessionToken(data.sessionToken)` to persist the token, then `setUser(data.user)`.
+  6. `src/components/auth/qr-login-screen.tsx` — same: persists `data.sessionToken` to localStorage after QR login.
+  7. `src/app/api/auth/logout/route.ts` — now reads BOTH the cookie and the Authorization header, and destroys the corresponding session(s) in the DB.
+- Verification (curl): login returns `sessionToken` in body; using ONLY `Authorization: Bearer <token>` (no cookie) on `/api/auth/me`, `/api/admins`, and `POST /api/admins` all return 200.
+- Verification (Agent Browser, simulating iframe): cleared all cookies but kept localStorage token → reloaded page → dashboard still rendered (auth via Bearer header) → created admin "Iframe Test Admin" → `POST /api/admins 200` → QR dialog appeared → "Admin wilayah berhasil dibuat". ZERO 401s in the entire flow.
+- Lint clean. Test admin cleaned up from DB.
+
+Stage Summary:
+- The "unauthorized" error when creating admins is permanently fixed. The app now authenticates via Bearer token (stored in localStorage, sent as Authorization header), which works inside the Preview Panel's cross-site iframe where cookies are blocked.
+- The cookie mechanism is retained as a fallback for same-origin (non-iframe) contexts.
+- Both super-admin email login and QR-code token login store the session token and work end-to-end in the iframe environment.

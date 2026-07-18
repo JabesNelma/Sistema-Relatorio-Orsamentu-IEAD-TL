@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Eye, EyeOff, KeyRound, Loader2, Lock, Mail, QrCode, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/auth-store'
+import { setSessionToken } from '@/lib/api-fetch'
 
 type Props = {
   open: boolean
@@ -45,10 +46,12 @@ export function LoginDialog({ open, onOpenChange }: Props) {
         toast.error(data.error || 'Gagal masuk')
         return
       }
-      // Trust the login response immediately. The dashboard's data fetches use
-      // apiFetch() which transparently retries on 401 while the browser commits
-      // the Set-Cookie header. This avoids blocking the user on a fragile
-      // "verify session" round-trip.
+      // Trust the login response immediately. Store the session token in
+      // localStorage so it can be sent as an Authorization: Bearer header —
+      // this works inside cross-site iframes (preview panel) where
+      // SameSite=Lax cookies are blocked. The cookie is also set by the
+      // server for same-origin contexts as a fallback.
+      setSessionToken(data.sessionToken)
       setUser(data.user)
       toast.success(`Selamat datang, ${data.user.name}!`)
       onOpenChange(false)
