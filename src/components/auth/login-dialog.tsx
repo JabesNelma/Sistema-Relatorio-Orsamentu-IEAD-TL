@@ -26,7 +26,7 @@ export function LoginDialog({ open, onOpenChange }: Props) {
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
-  const fetchUser = useAuthStore((s) => s.fetchUser)
+  const setUser = useAuthStore((s) => s.setUser)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -46,7 +46,9 @@ export function LoginDialog({ open, onOpenChange }: Props) {
         toast.error(data.error || 'Gagal masuk')
         return
       }
-      await fetchUser()
+      // Gunakan data user langsung dari respons login (lebih andal daripada
+      // request kedua ke /api/auth/me yang bisa gagal jika cookie belum commit).
+      setUser(data.user)
       toast.success(`Selamat datang, ${data.user.name}!`)
       onOpenChange(false)
       setEmail('')
