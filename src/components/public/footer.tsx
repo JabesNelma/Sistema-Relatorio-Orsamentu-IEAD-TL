@@ -23,7 +23,7 @@ export function Footer({ onLogin }: Props) {
                 <Church className="w-5 h-5 text-gold" />
               </div>
               <div>
-                <p className="font-serif text-xl text-cream tracking-wide">Gereja Emanuel</p>
+                <p className="font-serif text-xl text-cream tracking-wide">IEAD-TL</p>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-gold">Laporan Keuangan</p>
               </div>
             </div>
@@ -79,7 +79,7 @@ export function Footer({ onLogin }: Props) {
 
         <div className="mt-10 pt-6 border-t border-cream/10 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-cream/50">
-            © {new Date().getFullYear()} Gereja Emanuel · Sistem Laporan Keuangan
+            © {new Date().getFullYear()} IEAD-TL · Sistem Laporan Keuangan
           </p>
           <p className="text-xs text-cream/50 flex items-center gap-1.5">
             Dibuat dengan

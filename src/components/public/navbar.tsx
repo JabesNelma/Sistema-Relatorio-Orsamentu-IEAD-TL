@@ -49,7 +49,7 @@ export function Navbar({ onLogin }: Props) {
               'font-serif text-lg tracking-wide transition-colors',
               scrolled ? 'text-primary' : 'text-cream'
             )}>
-              Gereja Emanuel
+              IEAD-TL
             </span>
             <span className={cn(
               'text-[10px] uppercase tracking-[0.25em] transition-colors',

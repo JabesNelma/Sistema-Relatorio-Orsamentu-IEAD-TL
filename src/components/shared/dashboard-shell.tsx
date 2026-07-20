@@ -48,7 +48,7 @@ export function DashboardShell({ children, accent = 'emerald' }: Props) {
             </div>
             <div className="min-w-0">
               <p className="font-serif text-base sm:text-lg text-cream leading-none tracking-wide truncate">
-                Gereja Emanuel
+                IEAD-TL
               </p>
               <p className="text-[10px] uppercase tracking-[0.2em] text-cream/60 mt-0.5">
                 Portal Laporan Keuangan
@@ -86,7 +86,7 @@ export function DashboardShell({ children, accent = 'emerald' }: Props) {
       <footer className="mt-auto bg-emerald-deep text-cream/50 border-t border-cream/10">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <p className="text-[11px]">
-            © {new Date().getFullYear()} Gereja Emanuel · Sistem Laporan Keuangan
+            © {new Date().getFullYear()} IEAD-TL · Sistem Laporan Keuangan
           </p>
           <button onClick={handleLogout} className="text-[11px] text-cream/60 hover:text-gold transition-colors flex items-center gap-1">
             <Home className="w-3 h-3" />

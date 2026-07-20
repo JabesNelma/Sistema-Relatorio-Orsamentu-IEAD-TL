@@ -606,7 +606,7 @@ export function RegionalAdminDashboard() {
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border/60">
                           <Button size="sm" variant="outline" onClick={() => openQr(a)} className="h-8 text-xs border-gold/30 text-gold hover:bg-gold/10 hover:text-gold">
-                            <QrCode className="w-3.5 h-3.5 mr-1.5" /> Lihat QR
+                            <QrCode className="w-3.5 h-3.5 mr-1.5" /> Hare Qr kode
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => regenerateToken(a)} disabled={regenerating === a.id} className="h-8 text-xs">
                             {regenerating === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}

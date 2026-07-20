@@ -379,7 +379,7 @@ export function SuperAdminDashboard() {
                         onClick={() => openQr(a)}
                         className="h-8 text-xs border-gold/30 text-gold hover:bg-gold/10 hover:text-gold"
                       >
-                        <QrCode className="w-3.5 h-3.5 mr-1.5" /> Lihat QR
+                        <QrCode className="w-3.5 h-3.5 mr-1.5" /> Hare Qr kode
                       </Button>
                       <Button
                         size="sm"

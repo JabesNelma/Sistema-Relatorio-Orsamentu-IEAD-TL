@@ -41,7 +41,7 @@ export function Contact() {
   }
 
   const contactInfo = [
-    { icon: MapPin, label: 'Alamat', value: 'Jl. Emanuel No. 88, Jakarta, Indonesia', sub: 'Gereja Emanuel Pusat' },
+    { icon: MapPin, label: 'Alamat', value: 'Jl. Emanuel No. 88, Jakarta, Indonesia', sub: 'IEAD-TL Pusat' },
     { icon: Phone, label: 'Telepon', value: '+62 21 555 8899', sub: 'Senin–Sabtu, 08.00–17.00' },
     { icon: Mail, label: 'Email', value: 'kontak@gereja-emanuel.id', sub: 'Respon dalam 1×24 jam' },
   ]

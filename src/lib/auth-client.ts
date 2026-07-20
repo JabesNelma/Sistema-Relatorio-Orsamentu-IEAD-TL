@@ -1,46 +1,30 @@
-"use client";
-
-import { supabase } from "@/lib/supabase";
+import { supabaseBrowser } from '@/lib/supabase-browser'
 
 /**
- * Initiate Google OAuth login flow
- * This should be called from client-side
+ * Start Google OAuth via Supabase Auth. The browser navigates to Google; on
+ * return, /auth/callback exchanges the authorization code and mints the app
+ * session.
+ *
+ * Google Prompt / phone approval / 2FA are handled entirely by the user's
+ * Google account and device. The application cannot (and must not) force,
+ * store, or request any Google password.
  */
 export async function signInWithGoogle() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
-  const redirectTo = `${baseUrl}/auth/callback`;
-  
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo,
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      }
-    },
-  });
+  const redirectTo = `${window.location.origin}/auth/callback`
+
+  const { data, error } = await supabaseBrowser.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo },
+  })
 
   if (error) {
-    throw error;
+    throw error
   }
 
-  return data;
+  return data
 }
 
-/**
- * Get current session from Supabase
- */
-export async function getSession() {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  return session;
-}
-
-/**
- * Sign out from Supabase
- */
-export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+/** Clear the Supabase browser session (used after the app session is minted). */
+export async function signOutSupabase() {
+  await supabaseBrowser.auth.signOut()
 }

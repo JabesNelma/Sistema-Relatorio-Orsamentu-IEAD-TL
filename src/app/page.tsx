@@ -9,6 +9,7 @@ import { RegionalAdminDashboard } from '@/components/dashboards/regional-admin-d
 import { LocalAdminDashboard } from '@/components/dashboards/local-admin-dashboard'
 import { QrLoginScreen } from '@/components/auth/qr-login-screen'
 import { Church, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 function HomeContent() {
   const user = useAuthStore((s) => s.user)
@@ -22,6 +23,19 @@ function HomeContent() {
   useEffect(() => {
     fetchUser()
   }, [fetchUser])
+
+  // Surface OAuth callback results (set by /auth/callback).
+  useEffect(() => {
+    const err = searchParams.get('error')
+    const ok = searchParams.get('success')
+    if (err) {
+      toast.error(decodeURIComponent(err))
+      window.history.replaceState({}, '', '/')
+    } else if (ok) {
+      toast.success(decodeURIComponent(ok))
+      window.history.replaceState({}, '', '/')
+    }
+  }, [searchParams])
 
   // If a QR login token is present in the URL and the visitor is not yet logged
   // in, show the dedicated QR login screen (regional/local admins).

@@ -42,7 +42,7 @@ Work Log:
 - Rewrote POST /api/auth/login: token-based login for regional/local admins (checks tokenActive + active + password); email login restricted to SUPER_ADMIN only.
 - Added GET /api/auth/token/[token]: validates token WITHOUT authenticating, returns {name, role, region, local} for the QR login screen.
 - Created src/components/shared/qr-code-dialog.tsx: shows QRCodeSVG + secret link + copy + download PNG; supports "isNew" mode with password reminder.
-- Rewrote src/components/dashboards/super-admin-dashboard.tsx: simplified create form (nama, wilayah 1-4 buttons, password); shows QR dialog after creation; admin list has Lihat QR / Buat Ulang Link / Matikan-Nyalakan QR / toggle active / delete.
+- Rewrote src/components/dashboards/super-admin-dashboard.tsx: simplified create form (nama, wilayah 1-4 buttons, password); shows QR dialog after creation; admin list has Hare Qr kode / Buat Ulang Link / Matikan-Nyalakan QR / toggle active / delete.
 - Updated src/components/dashboards/regional-admin-dashboard.tsx: simplified local admin form (nama, lokal, password); same QR + toggle + regenerate controls for local admins.
 - Created src/components/auth/qr-login-screen.tsx: validates token via API, shows identity card + password field, logs in via token.
 - Rewrote src/app/page.tsx: wrapped in Suspense; detects ?token= query; shows QrLoginScreen when token present & not logged in.

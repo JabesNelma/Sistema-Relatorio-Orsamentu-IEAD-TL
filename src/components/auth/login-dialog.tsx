@@ -2,71 +2,29 @@
 
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Eye, EyeOff, KeyRound, Loader2, Lock, Mail, QrCode, ShieldCheck } from 'lucide-react'
+import { KeyRound, Loader2, QrCode } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/lib/auth-store'
-import { setSessionToken } from '@/lib/api-fetch'
+import { signInWithGoogle } from '@/lib/auth-client'
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-const demoAccounts = [
-  { role: 'Super Admin', email: 'superadmin@gereja.id', password: 'superadmin123', desc: 'Mengelola admin wilayah', icon: ShieldCheck },
-]
-
 export function LoginDialog({ open, onOpenChange }: Props) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
-  const setUser = useAuthStore((s) => s.setUser)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email || !password) {
-      toast.error('Email dan password wajib diisi')
-      return
-    }
+  async function handleGoogle() {
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || 'Gagal masuk')
-        return
-      }
-      // Trust the login response immediately. Store the session token in
-      // localStorage so it can be sent as an Authorization: Bearer header —
-      // this works inside cross-site iframes (preview panel) where
-      // SameSite=Lax cookies are blocked. The cookie is also set by the
-      // server for same-origin contexts as a fallback.
-      setSessionToken(data.sessionToken)
-      setUser(data.user)
-      toast.success(`Selamat datang, ${data.user.name}!`)
-      onOpenChange(false)
-      setEmail('')
-      setPassword('')
-    } catch {
-      toast.error('Terjadi kesalahan jaringan')
-    } finally {
+      // The browser navigates to Google here. /auth/callback finishes the
+      // login and mints the app session after the user is verified.
+      await signInWithGoogle()
+    } catch (err) {
       setLoading(false)
+      toast.error(err instanceof Error ? err.message : 'Login Google gagal')
     }
-  }
-
-  function fillDemo(acc: { email: string; password: string }) {
-    setEmail(acc.email)
-    setPassword(acc.password)
   }
 
   return (
@@ -90,99 +48,50 @@ export function LoginDialog({ open, onOpenChange }: Props) {
           </DialogHeader>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-foreground/80">Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="nama@gereja.id"
-                className="pl-9"
-                autoComplete="email"
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="password" className="text-foreground/80">Password</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                id="password"
-                type={showPass ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="pl-9 pr-9"
-                autoComplete="current-password"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
-              >
-                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+        <div className="p-6 space-y-4">
+          <div className="space-y-1.5 text-center">
+            <p className="text-sm text-foreground/80">
+              Super Admin login hanya melalui akun Google yang terdaftar.
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Verifikasi (Google Prompt / persetujuan ponsel / 2FA) ditangani
+              langsung oleh akun Google Anda, bukan oleh aplikasi.
+            </p>
           </div>
 
           <Button
-            type="submit"
+            type="button"
+            onClick={handleGoogle}
             disabled={loading}
-            className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+            className="w-full h-11 bg-white text-foreground hover:bg-white/90 border border-border font-medium flex items-center justify-center gap-2.5"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
-            Masuk
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            Login dengan Google
           </Button>
-
-          <div className="relative pt-1">
-            <Separator />
-            <span className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-card px-3 text-[11px] uppercase tracking-widest text-muted-foreground">
-                Akun Demo
-              </span>
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            {demoAccounts.map((acc) => (
-              <button
-                key={acc.email}
-                type="button"
-                onClick={() => fillDemo(acc)}
-                className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border bg-muted/40 hover:bg-accent/60 hover:border-gold/40 transition-all text-left group"
-              >
-                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15">
-                  <acc.icon className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{acc.role}</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground truncate">{acc.desc}</p>
-                </div>
-                <span className="text-[10px] text-gold font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                  Isi
-                </span>
-              </button>
-            ))}
-          </div>
 
           <div className="flex items-start gap-2 rounded-lg border border-gold/25 bg-gold/5 p-3 text-[11px] text-foreground/70">
             <QrCode className="w-4 h-4 text-gold shrink-0 mt-0.5" />
             <span>
-              <b className="text-foreground/85">Admin Wilayah & Lokal</b> tidak login di sini. Mereka memindai QR code rahasia yang diberikan oleh super admin/admin wilayah, lalu memasukkan password.
+              <b className="text-foreground/85">Admin Wilayah &amp; Lokal</b> tidak login di sini. Mereka memindai QR code rahasia yang diberikan oleh super admin/admin wilayah, lalu memasukkan password.
             </span>
           </div>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function GoogleIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+    </svg>
   )
 }
