@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { cookies, headers } from 'next/headers'
 import { db } from './db'
 import { randomBytes } from 'crypto'
+import { getSupabaseAdminClient, getSupabaseAnonClient, isSupabaseAuthEnabled } from './supabase'
 
 export const SESSION_COOKIE = 'gereja_session'
 const SESSION_DAYS = 7
@@ -10,7 +11,13 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10)
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(password: string, hash: string, email?: string): Promise<boolean> {
+  if (isSupabaseAuthEnabled() && email) {
+    const supabase = getSupabaseAnonClient()
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return !error
+  }
+
   return bcrypt.compare(password, hash)
 }
 
@@ -55,6 +62,37 @@ export function toSafeUser(user: any): SafeUser {
 // Generate a long, unguessable secret token for QR-code login links.
 export function generateLoginToken(): string {
   return randomBytes(24).toString('hex')
+}
+
+export async function syncSupabaseAuthUser(user: { email: string; name: string; role: SafeUser['role'] }, password: string) {
+  if (!isSupabaseAuthEnabled()) return null
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: user.email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      name: user.name,
+      role: user.role,
+    },
+  })
+
+  if (error) {
+    throw error
+  }
+
+  return data.user.id
+}
+
+export async function deleteSupabaseAuthUser(authUserId: string | null | undefined) {
+  if (!isSupabaseAuthEnabled() || !authUserId) return
+
+  const supabase = getSupabaseAdminClient()
+  const { error } = await supabase.auth.admin.deleteUser(authUserId)
+  if (error) {
+    throw error
+  }
 }
 
 export async function createSession(userId: string): Promise<string> {

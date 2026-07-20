@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser, hashPassword, toSafeUser, generateLoginToken } from '@/lib/auth'
+import { getCurrentUser, hashPassword, toSafeUser, generateLoginToken, syncSupabaseAuthUser, deleteSupabaseAuthUser } from '@/lib/auth'
 import { randomBytes } from 'crypto'
 
 // GET: list admins visible to current user
@@ -93,22 +93,30 @@ export async function POST(req: NextRequest) {
     }
 
     const loginToken = generateLoginToken()
-    const user = await db.user.create({
-      data: {
-        name,
-        email,
-        passwordHash: await hashPassword(password),
-        role: 'REGIONAL_ADMIN',
-        regionId: region.id,
-        createdById: me.id,
-        loginToken,
-        tokenActive: true,
-        tokenCreatedAt: new Date(),
-      },
-      include: {
-        region: { select: { id: true, name: true } },
-      },
-    })
+    const authUserId = await syncSupabaseAuthUser({ email, name, role: 'REGIONAL_ADMIN' }, password)
+    let user
+    try {
+      user = await db.user.create({
+        data: {
+          name,
+          email,
+          passwordHash: await hashPassword(password),
+          authUserId: authUserId ?? undefined,
+          role: 'REGIONAL_ADMIN',
+          regionId: region.id,
+          createdById: me.id,
+          loginToken,
+          tokenActive: true,
+          tokenCreatedAt: new Date(),
+        },
+        include: {
+          region: { select: { id: true, name: true } },
+        },
+      })
+    } catch (error) {
+      await deleteSupabaseAuthUser(authUserId).catch(() => {})
+      throw error
+    }
 
     return NextResponse.json({
       user: toSafeUser(user),
@@ -147,23 +155,31 @@ export async function POST(req: NextRequest) {
     }
 
     const loginToken = generateLoginToken()
-    const user = await db.user.create({
-      data: {
-        name,
-        email,
-        passwordHash: await hashPassword(password),
-        role: 'LOCAL_ADMIN',
-        regionId: me.regionId,
-        localId: finalLocalId,
-        createdById: me.id,
-        loginToken,
-        tokenActive: true,
-        tokenCreatedAt: new Date(),
-      },
-      include: {
-        local: { select: { id: true, name: true } },
-      },
-    })
+    const authUserId = await syncSupabaseAuthUser({ email, name, role: 'LOCAL_ADMIN' }, password)
+    let user
+    try {
+      user = await db.user.create({
+        data: {
+          name,
+          email,
+          passwordHash: await hashPassword(password),
+          authUserId: authUserId ?? undefined,
+          role: 'LOCAL_ADMIN',
+          regionId: me.regionId,
+          localId: finalLocalId,
+          createdById: me.id,
+          loginToken,
+          tokenActive: true,
+          tokenCreatedAt: new Date(),
+        },
+        include: {
+          local: { select: { id: true, name: true } },
+        },
+      })
+    } catch (error) {
+      await deleteSupabaseAuthUser(authUserId).catch(() => {})
+      throw error
+    }
 
     return NextResponse.json({
       user: toSafeUser(user),

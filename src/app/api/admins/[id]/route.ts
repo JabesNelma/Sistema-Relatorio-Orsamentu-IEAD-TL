@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser, generateLoginToken, toSafeUser } from '@/lib/auth'
+import { getCurrentUser, generateLoginToken, toSafeUser, deleteSupabaseAuthUser } from '@/lib/auth'
 
 // PATCH /api/admins/[id]
 // Body can include: { active?, tokenActive? }
@@ -65,6 +65,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
   }
 
+  await deleteSupabaseAuthUser(target.authUserId).catch(() => {})
   await db.user.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

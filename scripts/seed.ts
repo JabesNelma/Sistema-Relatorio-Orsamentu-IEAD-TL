@@ -1,5 +1,16 @@
 import { db } from '../src/lib/db'
-import { hashPassword, generateLoginToken } from '../src/lib/auth'
+import { hashPassword, generateLoginToken, syncSupabaseAuthUser } from '../src/lib/auth'
+
+async function syncSeededAuthUser(userId: string, email: string, name: string, role: 'SUPER_ADMIN' | 'REGIONAL_ADMIN' | 'LOCAL_ADMIN', password: string) {
+  const authUserId = await syncSupabaseAuthUser({ email, name, role }, password).catch((error) => {
+    console.warn('Supabase auth sync skipped:', error instanceof Error ? error.message : error)
+    return null
+  })
+
+  if (authUserId) {
+    await db.user.update({ where: { id: userId }, data: { authUserId } })
+  }
+}
 
 async function main() {
   console.log('🌱 Seeding database...')
@@ -20,6 +31,7 @@ async function main() {
       role: 'SUPER_ADMIN',
     },
   })
+  await syncSeededAuthUser(superAdmin.id, superAdmin.email, superAdmin.name, superAdmin.role, 'superadmin123')
   console.log(`✅ Super Admin: ${superAdmin.email} / superadmin123`)
 
   // 2. Create 4 regions (Wilayah 1 - Wilayah 4)
@@ -52,6 +64,7 @@ async function main() {
       tokenCreatedAt: new Date(),
     },
   })
+  await syncSeededAuthUser(regionalAdmin.id, regionalAdmin.email, regionalAdmin.name, regionalAdmin.role, 'regional123')
   console.log(`✅ Regional Admin: ${regionalAdmin.name} / regional123`)
   console.log(`   🔑 Login link: /?token=${regionalToken}`)
 
@@ -90,6 +103,7 @@ async function main() {
       tokenCreatedAt: new Date(),
     },
   })
+  await syncSeededAuthUser(localAdmin1.id, localAdmin1.email, localAdmin1.name, localAdmin1.role, 'lokal123')
   const la2Token = generateLoginToken()
   const localAdmin2 = await db.user.create({
     data: {
@@ -105,6 +119,7 @@ async function main() {
       tokenCreatedAt: new Date(),
     },
   })
+  await syncSeededAuthUser(localAdmin2.id, localAdmin2.email, localAdmin2.name, localAdmin2.role, 'lokal123')
   console.log(`✅ Local Admin: ${localAdmin1.name} / lokal123`)
   console.log(`   🔑 Login link: /?token=${la1Token}`)
   console.log(`✅ Local Admin: ${localAdmin2.name} / lokal123`)

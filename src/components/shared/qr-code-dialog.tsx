@@ -68,19 +68,19 @@ export function QrCodeDialog({ open, onOpenChange, token, name, roleLabel, scope
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md overflow-hidden p-0 gap-0">
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-md max-h-[calc(100vh-1rem)] overflow-y-auto p-0 gap-0">
         <div className="relative bg-emerald-deep text-cream px-6 pt-6 pb-5 overflow-hidden">
           <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gold/20 blur-2xl" />
           <DialogHeader className="relative space-y-2">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/40 flex items-center justify-center">
                 <KeyRound className="w-5 h-5 text-gold" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <DialogTitle className="font-serif text-xl text-cream tracking-wide">
                   {isNew ? 'QR Login Dibuat' : 'QR Code Login'}
                 </DialogTitle>
-                <DialogDescription className="text-cream/70 text-xs">
+                <DialogDescription className="text-cream/70 text-xs break-words">
                   {roleLabel}{scopeLabel ? ` · ${scopeLabel}` : ''}
                 </DialogDescription>
               </div>
@@ -88,7 +88,7 @@ export function QrCodeDialog({ open, onOpenChange, token, name, roleLabel, scope
           </DialogHeader>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-5 sm:p-6 space-y-4">
           {isNew && (
             <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 text-xs text-foreground/75 flex gap-2">
               <ShieldAlert className="w-4 h-4 text-gold shrink-0 mt-0.5" />
@@ -102,18 +102,18 @@ export function QrCodeDialog({ open, onOpenChange, token, name, roleLabel, scope
 
           {/* QR code */}
           <div className="flex justify-center">
-            <div className="p-4 rounded-2xl bg-white border border-border shadow-elegant">
+            <div className="p-3 sm:p-4 rounded-2xl bg-white border border-border shadow-elegant max-w-full overflow-hidden">
               {token ? (
                 <QRCodeSVG
                   id="qr-svg"
                   value={loginUrl || 'no-token'}
-                  size={208}
+                  size={Math.min(208, 208)}
                   level="M"
                   bgColor="#ffffff"
                   fgColor="#14342b"
                 />
               ) : (
-                <div className="w-[208px] h-[208px] flex items-center justify-center text-xs text-muted-foreground">
+                <div className="w-[208px] max-w-[70vw] aspect-square flex items-center justify-center text-xs text-muted-foreground text-center px-4">
                   Tidak ada token
                 </div>
               )}
@@ -125,8 +125,8 @@ export function QrCodeDialog({ open, onOpenChange, token, name, roleLabel, scope
             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
               <Link2 className="w-3.5 h-3.5" /> Link Login Rahasia
             </div>
-            <div className="flex items-stretch gap-2">
-              <code className="flex-1 min-w-0 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-[11px] text-foreground/80">
+            <div className="flex flex-col sm:flex-row items-stretch gap-2">
+              <code className="flex-1 min-w-0 rounded-md border border-border bg-muted/50 px-3 py-2 text-[11px] text-foreground/80 break-all whitespace-normal max-h-28 overflow-y-auto">
                 {loginUrl || '—'}
               </code>
               <Button type="button" size="sm" variant="outline" onClick={copyLink} className="px-3">
@@ -135,11 +135,11 @@ export function QrCodeDialog({ open, onOpenChange, token, name, roleLabel, scope
             </div>
           </div>
 
-          <div className="flex gap-2 pt-1">
-            <Button type="button" onClick={downloadQr} variant="outline" className="flex-1 h-10">
+          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            <Button type="button" onClick={downloadQr} variant="outline" className="flex-1 h-10 w-full sm:w-auto">
               <Download className="w-4 h-4 mr-2" /> Unduh QR
             </Button>
-            <Button type="button" onClick={() => onOpenChange(false)} className="flex-1 h-10 bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button type="button" onClick={() => onOpenChange(false)} className="flex-1 h-10 w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground">
               Selesai
             </Button>
           </div>

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Super admin harus login dengan email' }, { status: 403 })
       }
 
-      const valid = await verifyPassword(password, user.passwordHash)
+      const valid = await verifyPassword(password, user.passwordHash, user.email)
       if (!valid) {
         return NextResponse.json({ error: 'Password salah' }, { status: 401 })
       }
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const valid = await verifyPassword(password, user.passwordHash)
+    const valid = await verifyPassword(password, user.passwordHash, user.email)
     if (!valid) {
       return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 })
     }
