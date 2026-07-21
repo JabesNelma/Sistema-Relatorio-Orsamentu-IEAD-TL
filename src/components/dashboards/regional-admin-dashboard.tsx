@@ -205,7 +205,7 @@ export function RegionalAdminDashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => formatCompact(v).replace('Rp ', '')} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={60} />
+                <YAxis tickFormatter={(v) => formatCompact(v).replace('$', '')} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={60} />
                 <Tooltip
                   formatter={(v: number, n: string) => [formatCurrency(v), TRANSACTION_TYPE_LABELS[n] || n]}
                   contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12, boxShadow: '0 8px 24px -8px rgba(0,0,0,0.12)' }}
@@ -287,7 +287,7 @@ export function RegionalAdminDashboard() {
             <BarChart data={perLocal} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} interval={0} />
-              <YAxis tickFormatter={(v) => formatCompact(v).replace('Rp ', '')} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={60} />
+              <YAxis tickFormatter={(v) => formatCompact(v).replace('$', '')} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={60} />
               <Tooltip
                 formatter={(v: number, n: string) => [formatCurrency(v), TRANSACTION_TYPE_LABELS[n] || n]}
                 contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12 }}

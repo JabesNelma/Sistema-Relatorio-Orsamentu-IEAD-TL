@@ -22,19 +22,19 @@ export async function apiFetch<T = unknown>(
   return data as T;
 }
 
-/** Format a number as Timor-Leste / USD currency. */
+/** Format a number as USD currency with 2 decimals. */
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("id-ID", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
 /** Format a number with thousands separators. */
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat("id-ID").format(value);
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 /** Format an ISO date as DD MMM YYYY. */

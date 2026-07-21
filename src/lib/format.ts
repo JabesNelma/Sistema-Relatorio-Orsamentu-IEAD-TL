@@ -1,21 +1,21 @@
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount)
 }
 
 export function formatNumber(amount: number): string {
-  return new Intl.NumberFormat('id-ID').format(amount)
+  return new Intl.NumberFormat('en-US').format(amount)
 }
 
 export function formatCompact(amount: number): string {
-  if (Math.abs(amount) >= 1_000_000_000) return `Rp ${(amount / 1_000_000_000).toFixed(1)} M`
-  if (Math.abs(amount) >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(1)} jt`
-  if (Math.abs(amount) >= 1_000) return `Rp ${(amount / 1_000).toFixed(0)} rb`
-  return `Rp ${amount}`
+  if (Math.abs(amount) >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(2)}B`
+  if (Math.abs(amount) >= 1_000_000) return `$${(amount / 1_000_000).toFixed(2)}M`
+  if (Math.abs(amount) >= 1_000) return `$${(amount / 1_000).toFixed(1)}K`
+  return `$${amount.toFixed(2)}`
 }
 
 export function formatDate(date: Date | string): string {
