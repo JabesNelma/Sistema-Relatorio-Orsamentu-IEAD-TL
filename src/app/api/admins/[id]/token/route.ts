@@ -15,12 +15,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!target) return NextResponse.json({ error: 'Admin tidak ditemukan' }, { status: 404 })
 
   if (me.role === 'SUPER_ADMIN') {
-    if (target.role !== 'REGIONAL_ADMIN') {
-      return NextResponse.json({ error: 'Hanya dapat mengelola admin wilayah' }, { status: 403 })
-    }
-  } else if (me.role === 'REGIONAL_ADMIN') {
-    if (target.role !== 'LOCAL_ADMIN' || target.regionId !== me.regionId) {
-      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
+    if (target.role !== 'REGIONAL_ADMIN' && target.role !== 'LOCAL_ADMIN') {
+      return NextResponse.json({ error: 'Hanya dapat mengelola admin wilayah/lokal' }, { status: 403 })
     }
   } else {
     return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })

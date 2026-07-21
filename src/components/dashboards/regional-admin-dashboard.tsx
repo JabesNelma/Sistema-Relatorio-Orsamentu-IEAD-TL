@@ -3,11 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { DashboardShell } from '@/components/shared/dashboard-shell'
 import { StatCard } from '@/components/shared/stat-card'
-import { QrCodeDialog } from '@/components/shared/qr-code-dialog'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -32,26 +28,15 @@ import {
   ArrowUpCircle,
   Banknote,
   Building2,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Loader2,
   MapPin,
   PieChart as PieIcon,
-  Plus,
-  QrCode,
-  RefreshCw,
-  ShieldCheck,
-  ShieldOff,
-  Trash2,
   TrendingUp,
   UserCog,
   Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/auth-store'
-import { formatCompact, formatCurrency, formatDateShort, ROLE_LABELS, TRANSACTION_TYPE_LABELS } from '@/lib/format'
+import { formatCompact, formatCurrency, formatDateShort, TRANSACTION_TYPE_LABELS } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '@/lib/api-fetch'
 
@@ -103,26 +88,7 @@ export function RegionalAdminDashboard() {
   const [report, setReport] = useState<Report | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [toggling, setToggling] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState<string | null>(null)
-  const [regenerating, setRegenerating] = useState<string | null>(null)
   const [localFilter, setLocalFilter] = useState<string>('all')
-
-  // form state (simplified — no email/phone)
-  const [name, setName] = useState('')
-  const [password, setPassword] = useState('')
-  const [localMode, setLocalMode] = useState<'existing' | 'new'>('existing')
-  const [localId, setLocalId] = useState('')
-  const [localName, setLocalName] = useState('')
-  const [localAddress, setLocalAddress] = useState('')
-
-  // QR dialog state
-  const [qrOpen, setQrOpen] = useState(false)
-  const [qrToken, setQrToken] = useState<string | null>(null)
-  const [qrName, setQrName] = useState('')
-  const [qrIsNew, setQrIsNew] = useState(false)
-  const [qrPassword, setQrPassword] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -162,148 +128,6 @@ export function RegionalAdminDashboard() {
     if (!loading) fetchTx()
   }, [localFilter, loading])
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!name || !password) {
-      toast.error('Nama lengkap dan password wajib diisi')
-      return
-    }
-    if (localMode === 'existing' && !localId) {
-      toast.error('Pilih gereja lokal terlebih dahulu')
-      return
-    }
-    if (localMode === 'new' && !localName) {
-      toast.error('Masukkan nama gereja lokal baru')
-      return
-    }
-    setSubmitting(true)
-    try {
-      const body: any = { name, password }
-      if (localMode === 'existing') body.localId = localId
-      else { body.localName = localName; body.localAddress = localAddress }
-      const res = await apiFetch('/api/admins', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || 'Gagal membuat admin')
-        return
-      }
-      // Show the freshly generated QR code so the regional admin can save/share it.
-      setQrToken(data.loginToken)
-      setQrName(data.user.name)
-      setQrIsNew(true)
-      setQrPassword(password)
-      setQrOpen(true)
-      toast.success('Admin lokal berhasil dibuat')
-      setName(''); setPassword('')
-      setLocalName(''); setLocalAddress(''); setLocalId('')
-      setLocalMode('existing')
-      await fetchData()
-    } catch {
-      toast.error('Terjadi kesalahan')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  function openQr(admin: LocalAdmin) {
-    setQrToken(admin.loginToken)
-    setQrName(admin.name)
-    setQrIsNew(false)
-    setQrPassword(null)
-    setQrOpen(true)
-  }
-
-  async function toggleToken(admin: LocalAdmin) {
-    setToggling(admin.id)
-    try {
-      const res = await apiFetch(`/api/admins/${admin.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenActive: !admin.tokenActive }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || 'Gagal mengubah status QR')
-        return
-      }
-      setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, tokenActive: data.user.tokenActive } : a))
-      toast.success(data.user.tokenActive ? 'QR login diaktifkan' : 'QR login dimatikan — link lama tidak bisa dipakai')
-    } catch {
-      toast.error('Terjadi kesalahan')
-    } finally {
-      setToggling(null)
-    }
-  }
-
-  async function regenerateToken(admin: LocalAdmin) {
-    if (!confirm('Buat ulang link QR? Link lama akan langsung tidak berlaku.')) return
-    setRegenerating(admin.id)
-    try {
-      const res = await apiFetch(`/api/admins/${admin.id}/token`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || 'Gagal membuat ulang QR')
-        return
-      }
-      setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, loginToken: data.loginToken, tokenActive: true } : a))
-      setQrToken(data.loginToken)
-      setQrName(data.user.name)
-      setQrIsNew(true)
-      setQrPassword(null)
-      setQrOpen(true)
-      toast.success('Link QR baru dibuat')
-    } catch {
-      toast.error('Terjadi kesalahan')
-    } finally {
-      setRegenerating(null)
-    }
-  }
-
-  async function toggleActive(admin: LocalAdmin) {
-    setToggling(admin.id)
-    try {
-      const res = await apiFetch(`/api/admins/${admin.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !admin.active }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || 'Gagal mengubah status')
-        return
-      }
-      setAdmins((prev) => prev.map((a) => a.id === admin.id ? { ...a, active: data.user.active } : a))
-      toast.success(data.user.active ? 'Admin diaktifkan' : 'Admin dinonaktifkan')
-    } catch {
-      toast.error('Terjadi kesalahan')
-    } finally {
-      setToggling(null)
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Hapus admin lokal ini secara permanen?')) return
-    setDeleting(id)
-    try {
-      const res = await apiFetch(`/api/admins/${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const data = await res.json()
-        toast.error(data.error || 'Gagal menghapus')
-        return
-      }
-      setAdmins((prev) => prev.filter((a) => a.id !== id))
-      toast.success('Admin dihapus')
-    } catch {
-      toast.error('Terjadi kesalahan')
-    } finally {
-      setDeleting(null)
-    }
-  }
-
   const summary = report?.summary ?? { CASH_IN: 0, CASH_OUT: 0, REVENUE: 0, net: 0 }
   const perLocal = report?.perLocal ?? []
   const monthly = report?.monthly ?? []
@@ -318,7 +142,7 @@ export function RegionalAdminDashboard() {
           </h1>
           <p className="text-sm text-foreground/60 mt-1">
             Wilayah: <span className="font-medium text-foreground/80">{user.region?.name}</span> ·
-            {' '}Pantau laporan keuangan dari gereja lokal.
+            {' '}Pantau laporan keuangan dari gereja lokal. Admin lokal dibuat oleh Super Admin.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -478,85 +302,12 @@ export function RegionalAdminDashboard() {
       </Card>
 
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Create form */}
-        <Card className="lg:col-span-2 p-5 sm:p-6 border-border/70 h-fit">
-          <div className="flex items-center gap-2 mb-5">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <UserCog className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <h2 className="font-serif text-lg text-foreground">Buat Admin Lokal</h2>
-              <p className="text-xs text-foreground/55">Admin wilayah membuat admin gereja lokal</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="ra-name" className="text-foreground/80">Nama Lengkap</Label>
-              <Input id="ra-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama admin lokal" disabled={submitting} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ra-pass" className="text-foreground/80">Password</Label>
-              <Input id="ra-pass" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 6 karakter" disabled={submitting} />
-              <p className="text-[11px] text-muted-foreground">Password ini dipakai admin saat login via QR code.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-foreground/80">Gereja Lokal</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLocalMode('existing')}
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-sm transition-all',
-                    localMode === 'existing' ? 'border-gold/50 bg-accent/60 text-foreground' : 'border-border bg-muted/40 text-foreground/65 hover:bg-accent/40'
-                  )}
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Pilih
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocalMode('new')}
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-sm transition-all',
-                    localMode === 'new' ? 'border-gold/50 bg-accent/60 text-foreground' : 'border-border bg-muted/40 text-foreground/65 hover:bg-accent/40'
-                  )}
-                >
-                  <Plus className="w-4 h-4" /> Buat Baru
-                </button>
-              </div>
-              {localMode === 'existing' ? (
-                <Select value={localId} onValueChange={setLocalId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih gereja lokal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locals.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="space-y-2">
-                  <Input value={localName} onChange={(e) => setLocalName(e.target.value)} placeholder="Nama gereja lokal baru" />
-                  <Input value={localAddress} onChange={(e) => setLocalAddress(e.target.value)} placeholder="Alamat (opsional)" />
-                </div>
-              )}
-            </div>
-
-            <Button type="submit" disabled={submitting} className="w-full h-11 bg-primary text-cream hover:bg-primary/90">
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              Buat Admin Lokal
-            </Button>
-          </form>
-        </Card>
-
-        {/* Tabs: admins + locals + recent tx */}
-        <div className="lg:col-span-3">
+        {/* Tabs: admins (read-only) + locals + recent tx */}
+        <div className="lg:col-span-5">
           <Tabs defaultValue="admins">
             <TabsList className="grid grid-cols-3 w-full mb-4 bg-muted/60">
               <TabsTrigger value="admins" className="data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs sm:text-sm">
-                <UserCog className="w-4 h-4 mr-1.5" /> Admin Lokal
+                <UserCog className="w-4 h-4 mr-1.5" /> Admin Lokal ({admins.length})
               </TabsTrigger>
               <TabsTrigger value="locals" className="data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs sm:text-sm">
                 <Building2 className="w-4 h-4 mr-1.5" /> Gereja
@@ -568,6 +319,9 @@ export function RegionalAdminDashboard() {
 
             <TabsContent value="admins">
               <Card className="p-4 sm:p-5 border-border/70">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs text-muted-foreground">Daftar admin lokal di wilayah ini (dibuat oleh Super Admin).</p>
+                </div>
                 {loading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
@@ -580,7 +334,7 @@ export function RegionalAdminDashboard() {
                 ) : (
                   <div className="space-y-2.5 max-h-[460px] overflow-y-auto scrollbar-elegant pr-1 -mr-1">
                     {admins.map((a) => (
-                      <div key={a.id} className="group p-3.5 rounded-xl border border-border/70 bg-card hover:border-gold/30 hover:shadow-elegant transition-all">
+                      <div key={a.id} className="group p-3.5 rounded-xl border border-border/70 bg-card transition-all">
                         <div className="flex items-start gap-3">
                           <div className={cn(
                             'w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-serif text-sm font-semibold',
@@ -600,47 +354,7 @@ export function RegionalAdminDashboard() {
                             </div>
                             <p className="text-[11px] text-foreground/50 mt-0.5 flex items-center gap-1 flex-wrap">
                               <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {a.local?.name || '—'}</span>
-                              {a.loginToken && <><span className="mx-1">·</span><span className="flex items-center gap-1" title={a.loginToken}><Copy className="w-3 h-3" /> {a.loginToken.slice(0, 8)}…</span></>}
                             </p>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border/60">
-                          <Button size="sm" variant="outline" onClick={() => openQr(a)} className="h-8 text-xs border-gold/30 text-gold hover:bg-gold/10 hover:text-gold">
-                            <QrCode className="w-3.5 h-3.5 mr-1.5" /> Hare Qr kode
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => regenerateToken(a)} disabled={regenerating === a.id} className="h-8 text-xs">
-                            {regenerating === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
-                            Buat Ulang
-                          </Button>
-                          <div className="ml-auto flex items-center gap-1">
-                            <button
-                              onClick={() => toggleToken(a)}
-                              disabled={toggling === a.id}
-                              title={a.tokenActive ? 'Matikan QR' : 'Nyalakan QR'}
-                              className={cn(
-                                'h-8 px-2.5 rounded-md flex items-center gap-1 text-xs transition-colors',
-                                a.tokenActive ? 'text-foreground/60 hover:text-destructive hover:bg-destructive/10' : 'text-foreground/60 hover:text-gold hover:bg-gold/10'
-                              )}
-                            >
-                              {toggling === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : a.tokenActive ? <ShieldOff className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                              {a.tokenActive ? 'Matikan' : 'Nyalakan'}
-                            </button>
-                            <button
-                              onClick={() => toggleActive(a)}
-                              disabled={toggling === a.id}
-                              title={a.active ? 'Nonaktifkan akun' : 'Aktifkan akun'}
-                              className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                            >
-                              {a.active ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(a.id)}
-                              disabled={deleting === a.id}
-                              title="Hapus"
-                              className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            >
-                              {deleting === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -742,17 +456,6 @@ export function RegionalAdminDashboard() {
           </Tabs>
         </div>
       </div>
-
-      <QrCodeDialog
-        open={qrOpen}
-        onOpenChange={setQrOpen}
-        token={qrToken}
-        name={qrName}
-        roleLabel={ROLE_LABELS.LOCAL_ADMIN}
-        scopeLabel={user.region?.name ?? null}
-        password={qrPassword}
-        isNew={qrIsNew}
-      />
     </DashboardShell>
   )
 }
